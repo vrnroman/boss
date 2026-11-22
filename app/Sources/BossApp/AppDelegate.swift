@@ -198,19 +198,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let st = engine.status
         guard force || st != lastStatus else { return }
         lastStatus = st
-        let (symbol, color): (String, NSColor) = {
+        let stone: NSColor = {
             switch st {
-            case .idle: return ("waveform.circle.fill", .secondaryLabelColor)
-            case .listening: return ("waveform.circle.fill", .systemBlue)
-            case .speaking: return ("waveform.circle.fill", .systemGreen)
-            case .waiting: return ("questionmark.circle.fill", .systemOrange)
-            case .offline: return ("exclamationmark.triangle.fill", .systemYellow)
+            case .idle: return .systemGray
+            case .listening: return .systemBlue
+            case .speaking: return .systemGreen
+            case .waiting: return .systemOrange
+            case .offline: return .systemRed
             }
         }()
-        let cfg = NSImage.SymbolConfiguration(pointSize: 15, weight: .semibold).applying(.init(paletteColors: [color]))
-        let img = NSImage(systemSymbolName: symbol, accessibilityDescription: "Boss \(st.rawValue)")?.withSymbolConfiguration(cfg)
-        img?.isTemplate = (st == .idle)
-        statusItem.button?.image = img
+        statusItem.button?.image = RingLogo.menuBarImage(stone: stone)
         statusItem.button?.toolTip = "Boss: \(st.rawValue)"
     }
 
@@ -221,7 +218,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if let on { i.state = on ? .on : .off }
             return i
         }
-        let header = NSMenuItem(title: "Boss · \(engine.status.rawValue) · \(engine.countsText)", action: nil, keyEquivalent: "")
+        let motto = NSMenuItem(title: "Boss · One voice to rule them all", action: nil, keyEquivalent: "")
+        motto.isEnabled = false
+        menu.addItem(motto)
+        let header = NSMenuItem(title: "\(engine.status.rawValue) · \(engine.countsText)", action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
         menu.addItem(.separator())

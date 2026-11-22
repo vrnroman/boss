@@ -34,6 +34,9 @@ rm -rf "$OUT"
 mkdir -p "$OUT/Contents/MacOS" "$OUT/Contents/Resources/sounds"
 cp "$BIN" "$OUT/Contents/MacOS/Boss"
 cp "$SOUNDS"/*.wav "$OUT/Contents/Resources/sounds/" 2>/dev/null || true
+# App icon: the ring, drawn by make-icon.swift, packed by iconutil.
+ICONSET="$APP_DIR/build/Boss.iconset"
+rm -rf "$ICONSET" && swift "$APP_DIR/scripts/make-icon.swift" "$ICONSET" >/dev/null 2>&1 && iconutil -c icns "$ICONSET" -o "$OUT/Contents/Resources/Boss.icns" || echo "build-app: icon skipped"
 VERSION="${BOSS_VERSION:-0.1.0}"
 cat > "$OUT/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -42,6 +45,7 @@ cat > "$OUT/Contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleExecutable</key><string>Boss</string>
+  <key>CFBundleIconFile</key><string>Boss</string>
   <key>CFBundleIdentifier</key><string>${BOSS_BUNDLE_ID:-com.roman.boss.dev}</string>
   <key>CFBundleName</key><string>Boss</string>
   <key>CFBundleDisplayName</key><string>Boss</string>
