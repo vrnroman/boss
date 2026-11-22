@@ -475,7 +475,7 @@ struct CardView: View {
             Image(systemName: title.1).font(.system(size: 10, weight: .semibold)).foregroundStyle(accent)
             Text(title.0).font(.system(size: 11, weight: .semibold)).foregroundStyle(Palette.secondary)
             if let l = card.langChip, card.kind == .youSaid { Chip(text: l) }
-            if card.kind == .youSaid, let t = card.target { Chip(text: "→ \(t)", color: Palette.listening) }
+            if card.kind == .youSaid, let t = card.target { Chip(text: "→ \(engine.shownName(t))", color: Palette.listening) }
             Spacer()
             if card.kind == .youSaid, let s = card.status { StatusChip(status: s) }
             Text(SGT.time(card.createdAt).replacingOccurrences(of: " SGT", with: ""))
@@ -639,7 +639,7 @@ struct ConfirmContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 4) {
-                Text("→ \(card.target ?? "?")").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                Text("→ \(card.target.map(engine.shownName) ?? "?")").font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
                 if let r = card.reason, !r.isEmpty { Text("(\(r))").font(.system(size: 12)).foregroundStyle(Palette.secondary).lineLimit(1) }
             }
             if card.cancelled == true {

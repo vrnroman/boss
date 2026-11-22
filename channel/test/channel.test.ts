@@ -393,7 +393,7 @@ describe('routing context', () => {
     await h.post('/utterance', { id: 'ctx1', text: 'run it', sessions: [
       { name: 'bt-alpha', cwd: '/x/alpha-calc', status: 'idle' }, { name: 'reelshow-9d', cwd: '/x/reelshow', status: 'busy' }, { name: 'boss', cwd: '/x', status: 'idle' }] });
     const m = await h.wait((x) => x.params?.meta?.utterance_id === 'ctx1');
-    assert.equal(m.params.meta.sessions, 'bt-alpha (alpha-calc, idle)');
+    assert.equal(m.params.meta.sessions, 'alpha-calc = bt-alpha (alpha-calc, idle)');
     assert.doesNotMatch(m.params.meta.sessions, /reelshow|boss/);
     assert.equal(m.params.meta.last_target, 'bt-alpha');
     assert.match(m.params.meta.last_target_age_s, /^\d+$/);
@@ -406,7 +406,7 @@ describe('routing context', () => {
     await h.connect();
     await assert.rejects(h.call('route', { utterance_id: 's1', target: 'bt-boss', explicit: true }), /not allowed/);
     await h.post('/utterance', { id: 'self1', text: 'x', sessions: [{ name: 'bt-boss', cwd: '/b', status: 'idle' }, { name: 'bt-a', cwd: '/a', status: 'idle' }] });
-    assert.equal((await h.wait((x) => x.params?.meta?.utterance_id === 'self1')).params.meta.sessions, 'bt-a (a, idle)');
+    assert.equal((await h.wait((x) => x.params?.meta?.utterance_id === 'self1')).params.meta.sessions, 'a = bt-a (a, idle)');
     await h.stop();
   });
 
@@ -496,7 +496,7 @@ describe('routing question choices', () => {
       { name: 'bt-alpha', cwd: '/w/alpha-calc', status: 'idle' }, { name: 'bt-beta', cwd: '/w/beta-docs', status: 'idle' }] });
     const s = h.sse(); await s.ready;
     await h.call('ask', { question: 'Which README: alpha-calc or beta-docs?', choices: ['alpha-calc', 'beta-docs'], about_id: 'cq1' });
-    assert.deepEqual((await s.until((e) => e.event === 'ask')).data.choices, ['bt-alpha', 'bt-beta']);
+    assert.deepEqual((await s.until((e) => e.event === 'ask')).data.choices, ['alpha-calc', 'beta-docs']);
     await h.call('ask', { question: 'blue or green?', choices: ['blue', 'green'], session: 'bt-beta' });
     assert.deepEqual((await s.until((e) => e.event === 'ask' && e.data.session === 'bt-beta')).data.choices, ['blue', 'green']);
     s.close();
@@ -509,7 +509,7 @@ describe('sessions named like boss', () => {
     const h = await new Harness().start({ BOSS_NAME: 'boss' });
     await h.connect();
     await h.post('/utterance', { id: 'bn1', text: 'x', sessions: [{ name: 'boss-88', cwd: '/w/boss', status: 'idle' }, { name: 'boss', cwd: '/b', status: 'idle' }] });
-    assert.equal((await h.wait((x) => x.params?.meta?.utterance_id === 'bn1')).params.meta.sessions, 'boss-88 (boss, idle)');
+    assert.equal((await h.wait((x) => x.params?.meta?.utterance_id === 'bn1')).params.meta.sessions, 'boss = boss-88 (boss, idle)');
     const r = await h.call('route', { utterance_id: 'bn1', target: 'boss-88', explicit: true });
     assert.equal(r.decision, 'send');
     await assert.rejects(h.call('route', { utterance_id: 'bn1', target: 'boss', explicit: true }), /not allowed/);
@@ -556,7 +556,7 @@ describe('nicknames', () => {
     assert.deepEqual((await h.get('/state')).json.nicknames, { 'guard-29': 'shield' });
     const s1 = h.sse(); await s1.ready;
     await h.call('ask', { question: 'which?', choices: ['shield', 'reelshow-9d'], about_id: 'r1' });
-    assert.deepEqual((await s1.until((e) => e.event === 'ask')).data.choices, ['guard-29', 'reelshow-9d']);
+    assert.deepEqual((await s1.until((e) => e.event === 'ask')).data.choices, ['shield', 'reelshow']);
     s1.close();
     await h.call('nickname', { session: 'guard-29', nickname: '' });
     assert.deepEqual((await h.get('/state')).json.nicknames, {});
@@ -588,6 +588,42 @@ describe('session context', () => {
     assert.match(m.params.meta.sessions, /boss-88 \(boss, idle; recently: "make the boss panel more compact" then "I want a better logo, the ring"\)/);
     assert.match(m.params.meta.sessions, /guard-29 \(guard, idle\)/);
     assert.doesNotMatch(m.params.meta.sessions, /SendMessage me a REPORT/);
+    await h.stop();
+  });
+});
+
+describe('display names', () => {
+  test('folder names, numbered only when a folder has several sessions; nicknames win; answers map back', async () => {
+    const h = await new Harness().start();
+    await h.connect();
+    const live = [
+      { name: 'boss-88', cwd: '/w/boss', status: 'busy' }, { name: 'boss-12', cwd: '/w/boss', status: 'idle' },
+      { name: 'guard-29', cwd: '/w/guard', status: 'idle' }, { name: 'school-condo-31', cwd: '/w/school-condo', status: 'idle' },
+    ];
+    await h.post('/utterance', { id: 'd1', text: 'status', sessions: live });
+    const m = await h.wait((x) => x.params?.meta?.utterance_id === 'd1');
+    assert.match(m.params.meta.sessions, /boss 2 = boss-88 \(boss, busy\)/);
+    assert.match(m.params.meta.sessions, /boss = boss-12 \(boss, idle\)/);
+    assert.match(m.params.meta.sessions, /guard = guard-29/);
+    assert.match(m.params.meta.sessions, /school-condo = school-condo-31/);
+    await h.call('nickname', { session: 'guard', nickname: 'picket' });
+    const st = (await h.get('/state')).json;
+    assert.deepEqual(st.display, { 'boss-12': 'boss', 'boss-88': 'boss 2', 'guard-29': 'picket', 'school-condo-31': 'school-condo' });
+    const s = h.sse(); await s.ready;
+    const { question_id } = await h.call('ask', { question: 'which?', choices: ['guard-29', 'school-condo-31'], about_id: 'd1' });
+    assert.deepEqual((await s.until((e) => e.event === 'ask')).data.choices, ['picket', 'school-condo']);
+    s.close();
+    await h.post('/answer', { question_id, text: 'picket' });
+    const a = await h.wait((x) => x.params?.meta?.kind === 'answer');
+    assert.equal(a.params.meta.chosen, 'guard-29');
+    await h.stop();
+  });
+
+  test('a single session in a folder gets no number', async () => {
+    const h = await new Harness().start();
+    await h.connect();
+    await h.post('/utterance', { id: 'd2', text: 'x', sessions: [{ name: 'reelshow-9d', cwd: '/w/reelshow', status: 'idle' }] });
+    assert.deepEqual((await h.get('/state')).json.display, { 'reelshow-9d': 'reelshow' });
     await h.stop();
   });
 });

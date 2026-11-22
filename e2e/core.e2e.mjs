@@ -77,7 +77,7 @@ test('ambiguous: an unaddressed instruction with two sessions and no history get
   const { id, t0 } = await speak('Read me the first line of the README.', { lang: 'en' });
   const ask = await c.until((e) => e.event === 'ask' && e.data.about_id === id, 60_000, 'routing question');
   record('ambiguous utterance → question card', ask.t - t0);
-  assert.deepEqual([...ask.data.choices].sort(), ['bt-alpha', 'bt-beta']);
+  assert.deepEqual([...ask.data.choices].sort(), ['alpha-calc', 'beta-docs']);
   const sentBefore = c.events.filter((e) => e.event === 'routed' && e.data.utterance_id === id && e.data.status === 'sent');
   assert.equal(sentBefore.length, 0, 'nothing is sent before the answer');
   const ta = Date.now();
@@ -95,13 +95,14 @@ test('explicit dispatch: "bt-alpha: ..." lands verbatim in bt-alpha, then its RE
   assert.equal(routed.data.target, 'bt-alpha');
   assert.equal(c.events.filter((e) => e.event === 'confirm' && e.data.utterance_id === id).length, 0, 'explicit routes skip the confirm window');
   // Verbatim: the worker's transcript holds his words exactly, under the Roman (voice) header.
-  await sleep(1500);
+  // Verbatim: wait for the worker's transcript to hold his exact words under the voice header.
+  for (let i = 0; i < 30 && !transcript('bt-alpha').includes(words); i++) await sleep(500);
   const tr = transcript('bt-alpha');
   assert.ok(tr.includes(words), 'his words arrived verbatim');
   assert.ok(tr.includes('Roman (voice):'), 'with the voice header');
   const report = await c.until((e) => e.event === 'say' && e.data.kind === 'report' && e.data.session === 'bt-alpha' && e.t > routed.t, 150_000, 'report from bt-alpha');
   record('utterance → spoken report back', report.t - t0);
-  assert.match(report.data.text, /^bt-alpha:/);
+  assert.match(report.data.text, /^(bt-alpha|alpha-calc):/);   // Boss speaks the shown name
   assert.equal(readFileSync(join(W.alpha, 'hello.txt'), 'utf8').trim(), 'pineapple');
   assert.ok(!existsSync(join(W.beta, 'hello.txt')), 'beta did not get alpha\'s instruction');
   // No chatter on a successful dispatch: no say between routed and the report other than the report.
@@ -114,7 +115,7 @@ test('inferred route: a topic that matches one session opens the confirm window,
   const confirm = await c.until((e) => (e.event === 'confirm' || e.event === 'ask') && (e.data.utterance_id === id || e.data.about_id === id), 60_000, 'confirm or ask');
   if (confirm.event === 'ask') {
     // Acceptable per spec ("ask, don't guess"), but then it must offer beta and route on the answer.
-    assert.ok(confirm.data.choices.includes('bt-beta'));
+    assert.ok(confirm.data.choices.includes('beta-docs'));
     await c.http('POST', '/answer', { question_id: confirm.data.question_id, text: 'bt-beta' });
   } else {
     assert.equal(confirm.data.target, 'bt-beta');
@@ -122,7 +123,8 @@ test('inferred route: a topic that matches one session opens the confirm window,
   const routed = await c.until((e) => e.event === 'routed' && e.data.utterance_id === id && e.data.status === 'sent', 60_000, 'routed sent');
   record('utterance → landed (inferred, through the confirm window)', routed.t - t0);
   assert.equal(routed.data.target, 'bt-beta');
-  await c.until((e) => e.event === 'say' && e.data.kind === 'report' && e.data.session === 'bt-beta' && e.t > routed.t, 150_000, 'report from bt-beta');
+  // The work itself is the proof (a report from an earlier beta task can arrive in the same second).
+  for (let i = 0; i < 150 && !/Hello from Boss/i.test(readFileSync(join(W.beta, 'README.md'), 'utf8')); i++) await sleep(1000);
   assert.match(readFileSync(join(W.beta, 'README.md'), 'utf8'), /Hello from Boss/i);
 });
 
@@ -131,7 +133,7 @@ test('Russian: an utterance in Russian lands verbatim and Boss reports in Russia
   const { id, t0 } = await speak(`bt-alpha: ${words}`, { lang: 'ru' });
   const routed = await c.until((e) => e.event === 'routed' && e.data.utterance_id === id && e.data.status === 'sent', 60_000, 'routed (ru)');
   record('Russian utterance → landed', routed.t - t0);
-  await sleep(1500);
+  for (let i = 0; i < 30 && !transcript('bt-alpha').includes(words); i++) await sleep(500);
   assert.ok(transcript('bt-alpha').includes(words), 'Russian words arrived verbatim');
   const report = await c.until((e) => e.event === 'say' && e.data.session === 'bt-alpha' && e.t > routed.t && e.data.kind === 'report', 150_000, 'ru report');
   assert.match(report.data.text, /[а-яё]/i, `report should be Russian: ${report.data.text}`);
