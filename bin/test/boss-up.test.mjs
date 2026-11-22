@@ -92,3 +92,12 @@ test('a relative BOSS_HOME is made absolute (the pane runs in another directory)
   const { realpathSync } = await import('node:fs');
   assert.equal(JSON.parse(out).home, realpathSync('/tmp') + '/rel/home');
 });
+
+test('every BOSS_* flag reaches the pane (tmux does not inherit our environment)', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const out = execFileSync(process.execPath, ['-e', "import('" + new URL('../boss-up.mjs', import.meta.url).pathname + "').then(m => console.log(m.launchCommand()))"],
+    { env: { ...process.env, BOSS_RADIO_DRY: '1', BOSS_ALLOW: 'bt-*', BOSS_SOMETHING_NEW: 'x' }, encoding: 'utf8' });
+  assert.match(out, /BOSS_RADIO_DRY='1'/);
+  assert.match(out, /BOSS_ALLOW='bt-\*'/);
+  assert.match(out, /BOSS_SOMETHING_NEW='x'/);
+});

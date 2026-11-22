@@ -131,7 +131,7 @@ async function main() {
   const up = spawnSync(process.execPath, [join(REPO, 'bin', 'boss-up.mjs'), 'start'], { env, encoding: 'utf8' });
   if (up.status !== 0) throw new Error(`boss-up: ${up.stdout} ${up.stderr}`);
   const log = openSync(join(OUT, 'app.log'), 'w');
-  const appProc = appProcRef = spawn(APP, [], { env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_PANEL_EXPANDED: '1', BOSS_NAME: BOSS, BOSS_SESSIONS_ONLY: 'payments,site', BOSS_NO_MIC: '1' }, stdio: ['ignore', log, log] });
+  const appProc = appProcRef = spawn(APP, [], { env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_NO_TELEGRAM: '1', BOSS_PANEL_EXPANDED: '1', BOSS_NAME: BOSS, BOSS_SESSIONS_ONLY: 'payments,site', BOSS_NO_MIC: '1' }, stdio: ['ignore', log, log] });
   await poll(async () => { const s = (await app('GET', '/status')).json; return s?.boss_connected && s.sessions >= 2; }, 30_000, 'app ready');
 
   // A real iTerm window on the two workers, split top/bottom.

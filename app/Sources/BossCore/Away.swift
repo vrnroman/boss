@@ -26,8 +26,25 @@ public final class TelegramFallback: @unchecked Sendable {
     }
 
     /// The real runner: `sh ~/.claude/tools/telegram-send.sh "<text>"`.
-    public static func shellRunner(script: String = "~/.claude/tools/telegram-send.sh") -> Runner {
+    /// Telegram is for the real install only. A test, demo or sandbox instance (debug control on,
+    /// BOSS_NO_TELEGRAM, or a BOSS_HOME other than ~/Boss) must never message the owner's phone:
+    /// a run of test apps while the screen was locked once sent dozens of test reports.
+    public static func allowed(env: [String: String], defaultHome: String) -> Bool {
+        if env["BOSS_NO_TELEGRAM"] == "1" || env["BOSS_DEBUG_CONTROL"] == "1" { return false }
+        if let h = env["BOSS_HOME"], !h.isEmpty,
+           URL(fileURLWithPath: (h as NSString).expandingTildeInPath).standardizedFileURL.path != URL(fileURLWithPath: defaultHome).standardizedFileURL.path {
+            return false
+        }
+        return true
+    }
+
+    public static func shellRunner(script: String = "~/.claude/tools/telegram-send.sh", log: URL? = nil) -> Runner {
         { text in
+            if let log {
+                let line = "{\"at\":\"\(ISO8601DateFormatter().string(from: Date()))\",\"event\":\"telegram_send\",\"chars\":\(text.count)}\n"
+                if let h = try? FileHandle(forWritingTo: log) { h.seekToEndOfFile(); h.write(Data(line.utf8)); try? h.close() }
+                else { try? Data(line.utf8).write(to: log) }
+            }
             let path = (script as NSString).expandingTildeInPath
             guard FileManager.default.fileExists(atPath: path) else { return }
             let p = Process()

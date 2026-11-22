@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     let settings = BossSettings()
     let paths = BossPaths.fromEnvironment()
     var engine: BossEngine!
+    /// False for any test, demo or sandbox instance: those never message the phone.
+    var telegramAllowed = false
     var panel: FloatingPanel!
     var statusItem: NSStatusItem!
     let audio = AudioCapture()
@@ -45,8 +47,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let store = SessionsStore.fromEnvironment()
         let telegram = TelegramFallback(away: AwayDetector(idleSeconds: {
             CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
-        }), runner: TelegramFallback.shellRunner())
-        telegram.enabled = settings.telegramFallback
+        }), runner: TelegramFallback.shellRunner(log: paths.logs.appendingPathComponent("telegram.log")))
+        telegramAllowed = TelegramFallback.allowed(env: ProcessInfo.processInfo.environment,
+                                                   defaultHome: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Boss").path)
+        telegram.enabled = settings.telegramFallback && telegramAllowed
 
         let deps = BossDependencies(
             channel: channel, transcriber: WhisperServerTranscriber(), outbox: Outbox(dir: paths.outbox),
@@ -209,7 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(item("Telegram when away", settings.telegramFallback) { [weak self] in
             guard let s = self else { return }
             s.settings.telegramFallback.toggle()
-            s.engine.deps.telegram?.enabled = s.settings.telegramFallback
+            s.engine.deps.telegram?.enabled = s.settings.telegramFallback && s.telegramAllowed
         })
         let lang = NSMenu()
         for (code, title) in [("auto", "Auto (English / Russian)"), ("en", "English"), ("ru", "Русский")] {
@@ -338,7 +342,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             Task { await self.pollHealth(); await self.engine.refreshState() }
             if !self.engine.hotkeyActive { self.installHotkey(request: false) }
-            self.engine.deps.telegram?.enabled = self.settings.telegramFallback
+            self.engine.deps.telegram?.enabled = self.settings.telegramFallback && self.telegramAllowed
         }
         Task { await pollHealth() }
     }
