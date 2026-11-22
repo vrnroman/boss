@@ -85,7 +85,7 @@ fi
 
 # ---------- the app ----------
 if [ "$APP" = 1 ]; then
-  sh "$REPO/app/scripts/build-app.sh" >/dev/null
+  BOSS_BUNDLE_ID=com.roman.boss sh "$REPO/app/scripts/build-app.sh" >/dev/null
   mkdir -p "$APP_DIR"
   rm -rf "$APP_DIR/Boss.app"
   cp -R "$REPO/app/build/Boss.app" "$APP_DIR/Boss.app"
