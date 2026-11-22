@@ -16,10 +16,10 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } fro
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 export const env = process.env;
-const HOME = env.BOSS_HOME ?? join(homedir(), 'Boss');
+const HOME = resolve(env.BOSS_HOME ?? join(homedir(), 'Boss'));   // absolute: the pane runs elsewhere
 const PORT = Number(env.BOSS_PORT ?? 8788);
 // A non-default home (tests, sandboxes) gets its own tmux socket, so it can never stop the real Boss.
 const DEFAULT_HOME = join(homedir(), 'Boss');

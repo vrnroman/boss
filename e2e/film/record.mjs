@@ -62,6 +62,8 @@ async function captureLoop(wid, dir, fps = 4) {
 // ---------- app control ----------
 let token;
 let itermWindow = null;
+let appProcRef = null;
+let bossEnv = null;
 /** Closes only the iTerm window this recorder opened (by its id), never anything else. */
 function closeTerm() {
   if (!itermWindow || !/^\d+$/.test(itermWindow)) return;
@@ -125,10 +127,11 @@ async function main() {
   await Promise.all([startWorker('payments', W.payments, { bossName: BOSS }), startWorker('site', W.site, { bossName: BOSS })]);
   const env = { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_TMUX_SOCKET: SOCK, BOSS_TMUX_SESSION: BOSS, BOSS_NAME: BOSS, BOSS_ALLOW: 'payments,site', BOSS_RADIO_DRY: '1' };
   // The worker block names the boss; lib.mjs primed workers for "bt-boss", so re-prime for this film's name.
+  bossEnv = env;
   const up = spawnSync(process.execPath, [join(REPO, 'bin', 'boss-up.mjs'), 'start'], { env, encoding: 'utf8' });
   if (up.status !== 0) throw new Error(`boss-up: ${up.stdout} ${up.stderr}`);
   const log = openSync(join(OUT, 'app.log'), 'w');
-  const appProc = spawn(APP, [], { env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_PANEL_EXPANDED: '1', BOSS_NAME: BOSS, BOSS_SESSIONS_ONLY: 'payments,site', BOSS_NO_MIC: '1' }, stdio: ['ignore', log, log] });
+  const appProc = appProcRef = spawn(APP, [], { env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_PANEL_EXPANDED: '1', BOSS_NAME: BOSS, BOSS_SESSIONS_ONLY: 'payments,site', BOSS_NO_MIC: '1' }, stdio: ['ignore', log, log] });
   await poll(async () => { const s = (await app('GET', '/status')).json; return s?.boss_connected && s.sessions >= 2; }, 30_000, 'app ready');
 
   // A real iTerm window on the two workers, split top/bottom.
@@ -144,7 +147,7 @@ async function main() {
   end tell`], { encoding: 'utf8' }).trim();
   await sleep(2500);
   const panelId = windowId('Boss', (w) => w[1] === '3');
-  const termId = windowId('iTerm2', (w) => w[1] === '0' && Number(w[2]) >= 1100 && Number(w[2]) <= 1300);
+  const termId = windowId('iTerm', (w) => w[1] === '0' && Number(w[2]) >= 1100 && Number(w[2]) <= 1300);
   if (!panelId || !termId) throw new Error(`windows not found: panel ${panelId} term ${termId}`);
   mark(`windows panel=${panelId} term=${termId}`);
   const loops = [captureLoop(panelId, join(OUT, 'panel')), captureLoop(termId, join(OUT, 'term'))];
@@ -159,7 +162,7 @@ async function main() {
 
   // 2. Russian.
   end = scene('russian', 'Russian works the same way');
-  await say('Сайт, поменяй главный заголовок на «Деньги между командами за секунды» и отчитайся.', 'Milena');
+  await say('Сайт, поменяй главный заголовок на: Деньги между командами за секунды. И отчитайся.', 'Milena');
   await waitSpoken((s) => /site/i.test(s.text) && /[а-яё]/i.test(s.text), 240_000, 'site ru report');
   await sleep(4000); end();
 
@@ -187,7 +190,7 @@ async function main() {
     mark(`tap ${green}`);
     await app('POST', '/tap', { choice: green });
   }
-  await waitSpoken((s) => /site/i.test(s.text) && /green/i.test(s.text) && s.priority !== 'question', 240_000, 'green report');
+  await waitSpoken((s) => /site/i.test(s.text) && /green|зел/i.test(s.text) && s.priority !== 'question', 240_000, 'green report');
   await sleep(4000); end();
 
   // 5. Status.
@@ -226,4 +229,4 @@ async function main() {
   closeTerm();
 }
 
-main().catch((e) => { console.error(e); capturing.on = false; closeTerm(); writeFileSync(join(OUT, 'timeline.json'), JSON.stringify(timeline, null, 2)); process.exit(1); });
+main().catch((e) => { console.error(e); capturing.on = false; closeTerm(); appProcRef?.kill(); if (bossEnv) spawnSync(process.execPath, [join(REPO, 'bin', 'boss-up.mjs'), 'stop'], { env: bossEnv }); spawnSync('tmux', ['-L', SOCK, 'kill-server']); writeFileSync(join(OUT, 'timeline.json'), JSON.stringify(timeline, null, 2)); process.exit(1); });

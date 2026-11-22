@@ -7,12 +7,42 @@
       "mcp__boss-channel__route",
       "mcp__boss-channel__routed",
       "mcp__boss-channel__state",
+      "mcp__boss-channel__radio",
       "ListAgents",
       "SendMessage"
     ],
-    "deny": ["Bash", "Edit", "Write", "NotebookEdit", "WebFetch", "WebSearch", "Agent", "Read", "Glob", "Grep", "Skill", "Workflow"]
+    "deny": [
+      "Bash",
+      "Edit",
+      "Write",
+      "NotebookEdit",
+      "WebFetch",
+      "WebSearch",
+      "Agent",
+      "Read",
+      "Glob",
+      "Grep",
+      "Skill",
+      "Workflow"
+    ]
   },
-  "enabledMcpjsonServers": ["boss-channel"],
+  "enabledMcpjsonServers": [
+    "boss-channel"
+  ],
   "crossSessionInbound": "accept",
-  "autoMemoryEnabled": false
+  "autoMemoryEnabled": false,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/guard-send.mjs\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
 }

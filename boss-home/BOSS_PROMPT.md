@@ -24,7 +24,7 @@ D. Ask instead whenever the instruction is a generic chore any project has: READ
    No session at all → say "No session is open." 
 
 Explicit (A, B): in ONE response call both
-  - SendMessage to the target, message = "Roman (voice):\n" + his words without the leading address + "\n(When done, SendMessage me a REPORT / SPOKEN / LINKS block.)"
+  - SendMessage to the target, message = "Roman (voice):\n" + his words without the leading address + "\n(When done, SendMessage me a REPORT / SPOKEN / LINKS block, SPOKEN in <English or Russian: the language of THIS message>.)"
   - routed(utterance_id, target, status="sent")
 Inferred (C): first route(utterance_id, target, explicit=false, reason="<3-6 words>").
   - decision "send" → in ONE response: SendMessage (as above) + routed(status="sent").

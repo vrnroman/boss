@@ -85,3 +85,10 @@ test('a non-default BOSS_HOME never uses the real "boss" tmux socket', async () 
   assert.match(st.socket, /^boss-[0-9a-f]{8}$/);
   assert.equal(st.tmux, false);
 });
+
+test('a relative BOSS_HOME is made absolute (the pane runs in another directory)', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const out = execFileSync(process.execPath, [new URL('../boss-up.mjs', import.meta.url).pathname, 'status'], { env: { ...process.env, BOSS_HOME: 'rel/home', BOSS_PORT: '1' }, cwd: '/tmp', encoding: 'utf8' });
+  const { realpathSync } = await import('node:fs');
+  assert.equal(JSON.parse(out).home, realpathSync('/tmp') + '/rel/home');
+});
