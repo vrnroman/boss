@@ -95,6 +95,8 @@ public final class BossEngine {
     public private(set) var answerWindow: AnswerWindow?
     /// Debug control only: keep a 6 s answer window even without mic permission (see openAnswerWindow).
     public var allowSilentAnswerWindow = false
+    /// Set by the app: renders the panel's real view hierarchy to a PNG (works with the display asleep).
+    public var snapshotter: ((String) -> Bool)?
     public var hotkeyActive = false
     public var panelExpanded = false
     public var panelVisible = true
@@ -657,6 +659,11 @@ extension BossEngine: DebugControlHandler {
     public func debugUndo() async -> HTTPResponse {
         guard let (uid, r) = await undo() else { return .error(409, "nothing to undo") }
         return .json(r.isAccepted ? 200 : 502, ["ok": r.isAccepted, "utterance_id": uid])
+    }
+
+    public func debugSnapshot(path: String) -> HTTPResponse {
+        guard let s = snapshotter else { return .error(503, "no snapshotter") }
+        return s(path) ? .json(200, ["ok": true, "path": path]) : .error(500, "snapshot failed")
     }
 
     public func debugStatus() -> HTTPResponse {

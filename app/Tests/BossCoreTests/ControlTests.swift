@@ -62,11 +62,21 @@ struct HTTPParserTests {
     func debugUndo() async -> HTTPResponse { calls.append("undo"); return .json(200, [:]) }
     func debugSpoken() -> HTTPResponse { calls.append("spoken"); return .json(200, [:]) }
     func debugStatus() -> HTTPResponse { calls.append("status"); return .json(200, [:]) }
+    func debugSnapshot(path: String) -> HTTPResponse { calls.append("snapshot:\(path)"); return .json(200, [:]) }
 }
 
 @Suite("Debug control router")
 @MainActor
 struct DebugRouterTests {
+    @Test func snapshotNeedsAPngPath() async {
+        let h = FakeDebugHandler()
+        let r = DebugControlRouter(token: { "secret" }, handler: h)
+        #expect(await r.route(req("POST", "/snapshot", #"{"path":"/tmp/x.png"}"#)).status == 200)
+        #expect(await r.route(req("POST", "/snapshot", #"{"path":"/etc/passwd"}"#)).status == 400)
+        #expect(await r.route(req("POST", "/snapshot", #"{"path":"/tmp/x.png"}"#, auth: nil)).status == 403)
+        #expect(h.calls == ["snapshot:/tmp/x.png"])
+    }
+
     func req(_ m: String, _ p: String, _ body: String = "", auth: String? = "Bearer secret", origin: String? = nil) -> HTTPRequest {
         var h: [String: String] = [:]
         if let auth { h["authorization"] = auth }

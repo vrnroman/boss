@@ -72,7 +72,74 @@ function framesOf(dir) {
   return readdirSync(join(REC, dir)).filter((f) => f.endsWith('.png')).map((f) => ({ t: Number(f.slice(0, -4)), f: join(REC, dir, f) })).sort((a, b) => a.t - b.t);
 }
 const panel = framesOf('panel');
-const term = framesOf('term');
+
+// ---------- terminal frames: real tmux pane text (with colours) rendered as an iTerm-like window ----------
+const PAL = ['#1e1e1e', '#e06c75', '#98c379', '#e5c07b', '#61afef', '#c678dd', '#56b6c2', '#dcdfe4', '#5c6370', '#ef7b85', '#a7d68a', '#f0cf8a', '#7cc0f7', '#d797ea', '#6fd0dc', '#ffffff'];
+function xterm256(n) {
+  if (n < 16) return PAL[n];
+  if (n >= 232) { const v = 8 + (n - 232) * 10; return `rgb(${v},${v},${v})`; }
+  n -= 16; const c = [Math.floor(n / 36), Math.floor(n / 6) % 6, n % 6].map((x) => (x ? x * 40 + 55 : 0));
+  return `rgb(${c[0]},${c[1]},${c[2]})`;
+}
+const esc = (t) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+export function ansiToHtml(text) {
+  let fg = null, bg = null, bold = false, dim = false, out = '';
+  const parts = text.split(/(\x1b\[[0-9;]*m)/);
+  for (const p of parts) {
+    const m = /^\x1b\[([0-9;]*)m$/.exec(p);
+    if (!m) {
+      if (!p) continue;
+      const st = [fg && `color:${fg}`, bg && `background:${bg}`, bold && 'font-weight:700', dim && 'opacity:.6'].filter(Boolean).join(';');
+      out += st ? `<span style="${st}">${esc(p)}</span>` : esc(p);
+      continue;
+    }
+    const codes = (m[1] || '0').split(';').map(Number);
+    for (let i = 0; i < codes.length; i++) {
+      const c = codes[i];
+      if (c === 0) { fg = bg = null; bold = dim = false; }
+      else if (c === 1) bold = true; else if (c === 2) dim = true; else if (c === 22) bold = dim = false;
+      else if (c >= 30 && c <= 37) fg = PAL[c - 30]; else if (c >= 90 && c <= 97) fg = PAL[c - 82];
+      else if (c >= 40 && c <= 47) bg = PAL[c - 40]; else if (c >= 100 && c <= 107) bg = PAL[c - 92];
+      else if (c === 39) fg = null; else if (c === 49) bg = null;
+      else if ((c === 38 || c === 48) && codes[i + 1] === 5) { const v = xterm256(codes[i + 2]); if (c === 38) fg = v; else bg = v; i += 2; }
+      else if ((c === 38 || c === 48) && codes[i + 1] === 2) { const v = `rgb(${codes[i + 2]},${codes[i + 3]},${codes[i + 4]})`; if (c === 38) fg = v; else bg = v; i += 4; }
+    }
+  }
+  return out;
+}
+function lastLines(pane, n = 22) {
+  const lines = pane.replace(/\s+$/, '').split('\n');
+  return lines.slice(-n).join('\n');
+}
+const TERM_CSS = `body{margin:0;background:#0e1116}.win{width:1180px;height:960px;background:#1b1d22;border-radius:12px;overflow:hidden;border:1px solid #30343c;font-family:Menlo,monospace}
+.bar{height:34px;background:#2a2d33;display:flex;align-items:center;padding:0 14px;gap:8px}.dot{width:12px;height:12px;border-radius:6px}.ttl{color:#9aa0a6;font:13px -apple-system,sans-serif;margin-left:12px}
+.pane{height:461px;box-sizing:border-box;padding:6px 12px;border-bottom:1px solid #30343c;position:relative}.lab{position:absolute;right:12px;top:6px;color:#61afef;font:600 13px -apple-system,sans-serif}
+pre{margin:0;color:#dcdfe4;font-size:15.5px;line-height:19.5px;white-space:pre;overflow:hidden}.box{height:445px;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden}`;
+function renderTermFrames() {
+  const dir = join(REC, 'term');
+  const outDir = join(W, 'term');
+  mkdirSync(outDir, { recursive: true });
+  const files = readdirSync(dir).filter((f) => f.endsWith('.json')).sort();
+  const byContent = new Map();
+  const frames = [];
+  for (const f of files) {
+    const panes = JSON.parse(readFileSync(join(dir, f), 'utf8'));
+    const key = panes.map((p) => lastLines(p)).join('\u0000');
+    let png = byContent.get(key);
+    if (!png) {
+      png = join(outDir, `${f.slice(0, -5)}.png`);
+      const html = join(outDir, `${f.slice(0, -5)}.html`);
+      writeFileSync(html, `<!doctype html><meta charset="utf-8"><style>${TERM_CSS}</style><div class="win"><div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span class="ttl">iTerm · tmux · two Claude Code workers</span></div>` +
+        ['payments', 'site'].map((n, i) => `<div class="pane"><span class="lab">${n}</span><div class="box"><pre>${ansiToHtml(lastLines(panes[i] ?? ''))}</pre></div></div>`).join('') + '</div>');
+      execFileSync(CHROME, ['--headless=new', '--disable-gpu', '--hide-scrollbars', `--screenshot=${png}`, '--window-size=1180,960', '--force-device-scale-factor=1', `file://${html}`], { stdio: 'ignore' });
+      byContent.set(key, png);
+    }
+    frames.push({ t: Number(f.slice(0, -5)), f: png });
+  }
+  console.log(`terminal frames: ${files.length}, rendered ${byContent.size} unique`);
+  return frames;
+}
+const term = existsSync(join(REC, 'term')) && readdirSync(join(REC, 'term')).some((f) => f.endsWith('.json')) ? renderTermFrames() : framesOf('term');
 
 /** Normal-speed windows: around each spoken input and each Boss answer. Everything else in a scene is fast. */
 function normalWindows(scene, answers) {
@@ -226,28 +293,53 @@ async function main() {
   const pl = writeList(panelList, 'panel');
   const tlist = writeList(termList, 'term');
 
-  // Subtitles (ASS).
-  const ass = [`[Script Info]\nScriptType: v4.00+\nPlayResX: 1920\nPlayResY: 1080\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding`,
-    'Style: Title,Helvetica Neue,40,&H00F8B48A,&H00FFFFFF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,7,64,64,28,1',
-    'Style: Cap,Helvetica Neue,34,&H00EDEAE8,&H00FFFFFF,&H00161110,&HB0161110,0,0,0,0,100,100,0,0,3,14,0,2,120,120,36,1',
-    'Style: You,Helvetica Neue,36,&H0063D6FD,&H00FFFFFF,&H00161110,&HB0161110,1,0,0,0,100,100,0,0,3,12,0,2,120,120,110,1',
-    'Style: Boss,Helvetica Neue,36,&H0081C995,&H00FFFFFF,&H00161110,&HB0161110,1,0,0,0,100,100,0,0,3,12,0,2,120,120,110,1',
-    'Style: Fast,Helvetica Neue,30,&H00C4C7CC,&H00FFFFFF,&H00161110,&HC0161110,0,0,0,0,100,100,0,0,3,10,0,9,64,64,28,1',
-    '\n[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text'];
-  for (const s of subs) ass.push(`Dialogue: 0,${assTime(s.a)},${assTime(s.b)},${s.style},,0,0,0,,${assEsc(s.text)}`);
-  const assFile = join(W, 'subs.ass');
-  writeFileSync(assFile, ass.join('\n'));
+  // Captions: this ffmpeg has no libass/freetype, so each caption state is a transparent PNG
+  // rendered by Chrome, played as one more concat stream over the video.
+  const CAP_CSS = `html,body{margin:0;width:1920px;height:1080px;background:transparent;font-family:-apple-system,"SF Pro Display",Helvetica,sans-serif}
+  .title{position:absolute;left:70px;top:26px;color:#8ab4f8;font-size:40px;font-weight:700}
+  .fast{position:absolute;right:64px;top:30px;color:#c4c7cc;font-size:28px;background:rgba(16,17,22,.85);padding:6px 16px;border-radius:10px}
+  .bottom{position:absolute;left:0;right:0;bottom:30px;display:flex;flex-direction:column;align-items:center;gap:12px}
+  .line{max-width:1640px;font-size:34px;line-height:1.3;padding:10px 22px;border-radius:12px;background:rgba(16,17,22,.88);text-align:center}
+  .Cap{color:#e8eaed}.You{color:#fdd663;font-weight:600}.Boss{color:#81c995;font-weight:600}`;
+  const cuts = [...new Set(subs.flatMap((x) => [x.a, x.b]).concat([0, T]))].filter((x) => x >= 0 && x <= T).sort((a, b) => a - b);
+  const capDir = join(W, 'caps');
+  mkdirSync(capDir, { recursive: true });
+  const capList = [];
+  const rendered = new Map();
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const a = cuts[i], b = cuts[i + 1];
+    if (b - a < 0.02) continue;
+    const mid = (a + b) / 2;
+    const act = subs.filter((x) => x.a <= mid && x.b > mid);
+    const title = act.find((x) => x.style === 'Title');
+    const fast = act.find((x) => x.style === 'Fast');
+    const lines = ['You', 'Boss', 'Cap'].flatMap((st) => act.filter((x) => x.style === st));
+    const html = `<!doctype html><meta charset="utf-8"><style>${CAP_CSS}</style><body>` +
+      (title ? `<div class="title">${esc(title.text)}</div>` : '') + (fast ? `<div class="fast">${esc(fast.text)}</div>` : '') +
+      `<div class="bottom">${lines.map((x) => `<div class="line ${x.style}">${esc(x.text)}</div>`).join('')}</div></body>`;
+    let png = rendered.get(html);
+    if (!png) {
+      png = join(capDir, `cap${rendered.size}.png`);
+      const hf = png.replace(/\.png$/, '.html');
+      writeFileSync(hf, html);
+      execFileSync(CHROME, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--default-background-color=00000000', `--screenshot=${png}`, '--window-size=1920,1080', '--force-device-scale-factor=1', `file://${hf}`], { stdio: 'ignore' });
+      rendered.set(html, png);
+    }
+    capList.push({ f: png, d: b - a });
+  }
+  const cl = writeList(capList, 'caps');
+  console.log(`captions: ${rendered.size} states`);
 
   // Video: background, panel left, terminal right; cards are full-frame in both streams, so scale them alike.
   const video = join(W, 'video.mp4');
   ff(['-f', 'lavfi', '-i', `color=c=0x0e1116:s=1920x1080:r=${FPS}:d=${T.toFixed(2)}`,
-    '-f', 'concat', '-safe', '0', '-i', pl, '-f', 'concat', '-safe', '0', '-i', tlist,
+    '-f', 'concat', '-safe', '0', '-i', pl, '-f', 'concat', '-safe', '0', '-i', tlist, '-f', 'concat', '-safe', '0', '-i', cl,
     '-filter_complex',
     `[1:v]scale=w='if(gte(iw,1900),1920,-2)':h='if(gte(iw,1900),1080,900)',setsar=1,fps=${FPS}[p];` +
     `[2:v]scale=w='if(gte(iw,1900),1920,1180)':h='if(gte(iw,1900),1080,-2)',setsar=1,fps=${FPS}[t];` +
     `[0:v][t]overlay=x='if(gte(overlay_w,1900),0,670)':y='if(gte(overlay_w,1900),0,96)':shortest=1[bt];` +
     `[bt][p]overlay=x='if(gte(overlay_w,1900),0,70)':y='if(gte(overlay_w,1900),0,96)':shortest=1[v0];` +
-    `[v0]subtitles='${assFile}'[v]`,
+    `[3:v]format=rgba,fps=${FPS}[c];[v0][c]overlay=0:0:shortest=1[v]`,
     '-map', '[v]', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-preset', 'medium', '-crf', '20', '-r', '30', video]);
 
   // Audio: every clip at its time.
