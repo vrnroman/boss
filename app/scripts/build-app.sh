@@ -42,7 +42,7 @@ cat > "$OUT/Contents/Info.plist" <<PLIST
 <dict>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleExecutable</key><string>Boss</string>
-  <key>CFBundleIdentifier</key><string>com.roman.boss</string>
+  <key>CFBundleIdentifier</key><string>${BOSS_BUNDLE_ID:-com.roman.boss.dev}</string>
   <key>CFBundleName</key><string>Boss</string>
   <key>CFBundleDisplayName</key><string>Boss</string>
   <key>CFBundlePackageType</key><string>APPL</string>
