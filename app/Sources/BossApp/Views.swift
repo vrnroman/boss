@@ -267,7 +267,7 @@ struct ControlsRow: View {
             LanguageToggle(engine: engine)
             IconButton(symbol: engine.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                        active: engine.muted, help: engine.muted ? "Unmute" : "Mute") { engine.setMuted(!engine.muted) }
-            IconButton(symbol: "arrow.counterclockwise", active: false, help: "Repeat last") { engine.repeatLast() }
+            IconButton(symbol: "text.bubble", active: false, help: "Say the last answer again") { engine.repeatLast() }
         }
     }
 }

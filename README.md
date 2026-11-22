@@ -26,7 +26,7 @@ the results back to you. Phase 1 of `docs/SPEC.md` (milestones M1 + M2).
   "Radio me" sends a spoken recap of recent reports to your Telegram.
 - Away from the Mac for 10+ minutes: reports and questions also go to Telegram as text.
 
-## Install / redeploy / remove
+## Install / redeploy / remove (see INSTALL.md)
 ```sh
 sh install/install.sh          # idempotent; also the redeploy
 sh install/uninstall.sh        # puts ~/.claude/CLAUDE.md and settings.json back
