@@ -282,9 +282,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         preview.onPartial = { [weak self] t in self?.engine.updatePartialTranscript(t) }
     }
 
+    let optionSpace = OptionSpaceHotkey()
+
     func setupHotkey() {
         hotkey.onGesture = { [weak self] events in self?.engine.handleGesture(events) }
         installHotkey(request: true)
+        // Office key: Left Option + Space needs no permission at all.
+        optionSpace.onDown = { [weak self] in self?.engine.talkControlDown(source: .hotkey) }
+        optionSpace.onUp = { [weak self] in self?.engine.talkControlUp(source: .hotkey) }
+        optionSpace.onEscape = { [weak self] in self?.engine.cancelTalk() }
+        optionSpace.install()
     }
 
     func installHotkey(request: Bool) {
@@ -297,7 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             // Granted in System Settings after launch: macOS only honours it in a new process.
             relaunchOnceForInputMonitoring()
         } else {
-            engine.addSystem("Grant Input Monitoring for the Right Option hotkey. The Talk button works meanwhile.",
+            engine.addSystem("Right Option needs Input Monitoring. Left Option + Space and the Talk button work without it.",
                              level: "warning", action: "grantInputMonitoring", key: "hotkey")
         }
     }
@@ -422,6 +429,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if rec { self.engine.updateLevel(self.audio.level) }
             if rec != self.wasRecording {
                 self.wasRecording = rec
+                self.optionSpace.setEscapeActive(rec)
                 if rec, self.settings.livePreview {
                     self.preview.ensureAuthorization()
                     self.audio.pipe.onRecordingBuffer = self.preview.begin()
