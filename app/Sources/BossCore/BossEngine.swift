@@ -93,6 +93,8 @@ public final class BossEngine {
     public private(set) var speaking = false
     public private(set) var previewTarget: String?
     public private(set) var answerWindow: AnswerWindow?
+    /// Debug control only: keep a 6 s answer window even without mic permission (see openAnswerWindow).
+    public var allowSilentAnswerWindow = false
     public var hotkeyActive = false
     public var panelExpanded = false
     public var panelVisible = true
@@ -478,7 +480,21 @@ public final class BossEngine {
 
     /// After a question is spoken: open the mic for 6 s; speech in it answers the question.
     public func openAnswerWindow(questionID: String) {
-        guard recording == nil, deps.recorder.permission == "granted" else { return }
+        guard recording == nil else { return }
+        let micOK = deps.recorder.permission == "granted"
+        if !micOK {
+            // No mic: no window, unless the debug harness asked for a listening-free one
+            // (so an injected spoken answer can be tested end to end without a microphone).
+            guard allowSilentAnswerWindow else { return }
+            answerWindow = AnswerWindow(questionID: questionID, deadline: deps.clock().addingTimeInterval(Self.answerWindowSeconds))
+            answerTimerToken += 1
+            let token = answerTimerToken
+            Task { @MainActor in
+                await deps.sleep(Self.answerWindowSeconds)
+                if token == answerTimerToken, answerWindow?.questionID == questionID { answerWindow = nil }
+            }
+            return
+        }
         answerWindow = AnswerWindow(questionID: questionID, deadline: deps.clock().addingTimeInterval(Self.answerWindowSeconds))
         guard beginTalk(source: .answerWindow) else { answerWindow = nil; return }
         answerTimerToken += 1

@@ -105,7 +105,8 @@ plist() { # label, program args (one per line), keepalive(true/false)
     printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n'
     printf '<key>Label</key><string>%s</string>\n<key>ProgramArguments</key><array>\n' "$label"
     printf '%s\n' "$args" | while IFS= read -r a; do [ -n "$a" ] && printf '<string>%s</string>\n' "$a"; done
-    printf '</array>\n<key>RunAtLoad</key><true/>\n<key>KeepAlive</key><%s/>\n' "$keep"
+    if [ "$keep" = crash ]; then keepxml='<dict><key>SuccessfulExit</key><false/></dict>'; else keepxml="<$keep/>"; fi
+    printf '</array>\n<key>RunAtLoad</key><true/>\n<key>KeepAlive</key>%s\n' "$keepxml"
     printf '<key>EnvironmentVariables</key><dict><key>PATH</key><string>%s</string><key>BOSS_HOME</key><string>%s</string></dict>\n' "$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin" "$BOSS_HOME"
     printf '<key>StandardOutPath</key><string>%s/logs/%s.out</string><key>StandardErrorPath</key><string>%s/logs/%s.err</string>\n' "$BOSS_HOME" "$label" "$BOSS_HOME" "$label"
     printf '<key>ProcessType</key><string>Interactive</string>\n</dict></plist>\n'
@@ -137,7 +138,7 @@ $BOSS_HOME/tts
   plist com.roman.boss.up "$NODE
 $BOSS_HOME/bin/boss-up.mjs
 keep" true
-  [ "$APP" = 1 ] && plist com.roman.boss.app "$APP_DIR/Boss.app/Contents/MacOS/Boss" false
+  [ "$APP" = 1 ] && plist com.roman.boss.app "$APP_DIR/Boss.app/Contents/MacOS/Boss" crash
   for l in com.roman.boss.whisper com.roman.boss.tts com.roman.boss.up com.roman.boss.app; do
     [ -f "$LAUNCH_DIR/$l.plist" ] || continue
     launchctl bootout "gui/$(id -u)/$l" 2>/dev/null || true

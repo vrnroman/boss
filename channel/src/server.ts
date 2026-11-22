@@ -10,6 +10,7 @@ const ch = new Channel({
   input: process.stdin,
   output: process.stdout,
   allow: process.env.BOSS_ALLOW ?? '*',
+  selfName: process.env.BOSS_NAME ?? 'boss',
   humor: Number(process.env.BOSS_HUMOR ?? 1),
   confirmWindowMs: process.env.BOSS_CONFIRM_MS ? Number(process.env.BOSS_CONFIRM_MS) : undefined,
 });

@@ -401,6 +401,15 @@ describe('routing context', () => {
     assert.equal((await h.wait((x) => x.params?.meta?.utterance_id === 'ctx2')).params.meta.sessions, 'none');
     await h.stop();
   });
+  test('Boss never routes to itself, under any name', async () => {
+    const h = await new Harness().start({ BOSS_ALLOW: 'bt-*', BOSS_NAME: 'bt-boss' });
+    await h.connect();
+    await assert.rejects(h.call('route', { utterance_id: 's1', target: 'bt-boss', explicit: true }), /not allowed/);
+    await h.post('/utterance', { id: 'self1', text: 'x', sessions: [{ name: 'bt-boss', cwd: '/b', status: 'idle' }, { name: 'bt-a', cwd: '/a', status: 'idle' }] });
+    assert.equal((await h.wait((x) => x.params?.meta?.utterance_id === 'self1')).params.meta.sessions, 'bt-a (a, idle)');
+    await h.stop();
+  });
+
   test('the allow list is part of the instructions Boss gets', async () => {
     const h = await new Harness().start({ BOSS_ALLOW: 'bt-*' });
     const init = await h.connect();

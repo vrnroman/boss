@@ -43,6 +43,17 @@ struct EngineTests {
         #expect(rig.engine.answerWindow == nil)
     }
 
+    @Test func debugSilentAnswerWindowWithoutMicExpiresAndRecordsNothing() async {
+        let rig = Rig(sleep: { _ in try? await Task.sleep(nanoseconds: 50_000_000) })
+        rig.recorder.permission = "denied"
+        rig.engine.allowSilentAnswerWindow = true
+        rig.engine.handle(ask())
+        #expect(await eventually { rig.engine.answerWindow?.questionID == "q1" })
+        #expect(rig.recorder.starts == 0)
+        #expect(await eventually { rig.engine.answerWindow == nil })
+        #expect(rig.channel.calls.value.isEmpty)
+    }
+
     @Test func tapChoicePostsAnswerAndClosesWindow() async {
         let rig = Rig(sleep: { _ in try? await Task.sleep(nanoseconds: 5_000_000_000) })
         rig.engine.handle(ask())

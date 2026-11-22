@@ -134,8 +134,8 @@ public struct FeedModel: Sendable {
             modify("you-\(r.utteranceID)") { c in
                 if !r.target.isEmpty { c.target = r.target }
                 if c.status == "undone" { return }
-                if c.status == "delivered" && r.status == "sent" { return }
-                c.status = r.status
+                // Boss reports "sent" once SendMessage put the words in the worker's inbox: that is delivery.
+                c.status = r.status == "sent" ? "delivered" : r.status
                 if let n = r.note { c.note = n }
             }
             // A decided route ends any confirm countdown for this utterance.

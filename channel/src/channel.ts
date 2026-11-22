@@ -24,6 +24,8 @@ export type ChannelOpts = {
   input: Readable;
   output: Writable;
   allow?: string;
+  /** This Boss session's own name: never a routing target. */
+  selfName?: string;
   humor?: number;
   confirmWindowMs?: number;
   now?: () => number;
@@ -65,6 +67,7 @@ export class Channel {
   http: Server;
   token: string;
   allow: string;
+  selfName: string;
   humor: number;
   confirmWindowMs: number;
   started = Date.now();
@@ -77,6 +80,7 @@ export class Channel {
     this.state = new State(opts.home, opts.now);
     this.token = readToken(opts.home);
     this.allow = opts.allow ?? '*';
+    this.selfName = opts.selfName ?? 'boss';
     this.humor = opts.humor ?? 1;
     this.confirmWindowMs = opts.confirmWindowMs ?? CONFIRM_WINDOW_MS;
     mkdirSync(join(opts.home, 'logs'), { recursive: true });
@@ -130,7 +134,7 @@ export class Channel {
     const live = list
       .map((x) => (typeof x === 'object' && x ? (x as Record<string, unknown>) : {}))
       .map((x) => ({ name: str(x.name, 60).trim(), cwd: str(x.cwd, 300), status: str(x.status, 20) }))
-      .filter((x) => x.name && x.name !== 'boss' && allowed(this.allow, x.name))
+      .filter((x) => x.name && !this.isSelf(x.name) && allowed(this.allow, x.name))
       .slice(0, 30)
       .map((x) => `${x.name} (${x.cwd.split('/').filter(Boolean).pop() ?? '-'}, ${x.status || '?'})`);
     const last = [...this.state.routes].reverse().find((r) => r.sent_at);
@@ -140,6 +144,10 @@ export class Channel {
       last_target: last?.target,
       last_target_age_s: age === undefined ? undefined : String(age),
     };
+  }
+
+  isSelf(name: string): boolean {
+    return name === 'boss' || name === this.selfName;
   }
 
   stateView(): Record<string, unknown> {
@@ -196,7 +204,7 @@ export class Channel {
         const target = str(a.target, 100).trim();
         const utterance_id = str(a.utterance_id, 80);
         if (!target) throw new ToolError('target is empty');
-        if (!allowed(this.allow, target) || target === 'boss') throw new ToolError(`target "${target}" is not allowed (allow: ${this.allow})`);
+        if (!allowed(this.allow, target) || this.isSelf(target)) throw new ToolError(`target "${target}" is not allowed (allow: ${this.allow})`);
         const explicit = a.explicit === true;
         const r = s.addRoute({ utterance_id, target, explicit, reason: str(a.reason, 200) });
         const trusted = explicit || graduated(s.ledger[target]);

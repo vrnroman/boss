@@ -109,6 +109,18 @@ struct FeedTests {
         #expect(f.lastRoute == "→ payments")
     }
 
+    @Test func bossRoutedSentMeansDeliveredToTheWorker() {
+        var f = FeedModel()
+        f.addRecording(utteranceID: "u2", mode: "talk", answersQuestionID: nil, at: t0)
+        f.setStatus(utteranceID: "u2", "sent")   // accepted by the channel: not yet in a worker
+        #expect(f.card("you-u2")?.target == nil)
+        f.apply(.routed(RoutedEvent(utteranceID: "u2", target: "gateway", status: "sent", note: nil)), at: t0)
+        #expect(f.card("you-u2")?.status == "delivered")
+        #expect(f.card("you-u2")?.target == "gateway")
+        f.apply(.routed(RoutedEvent(utteranceID: "u2", target: "gateway", status: "ignored", note: nil)), at: t0)
+        #expect(f.card("you-u2")?.status == "ignored")
+    }
+
     @Test func newestFirstAndDedupe() {
         var f = FeedModel()
         let say = SayEvent(id: "s1", text: "Done.", links: [Link(title: "PR", url: "https://x")], speak: true, session: "payments", lang: "en", kind: "report", at: nil)

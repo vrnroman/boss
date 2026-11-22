@@ -102,9 +102,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function launchCommand() {
   const extra = env.BOSS_EXTRA_ARGS ? ` ${env.BOSS_EXTRA_ARGS}` : '';
-  const vars = ['BOSS_HOME', 'BOSS_PORT', 'BOSS_ALLOW', 'BOSS_HUMOR', 'BOSS_CONFIRM_MS']
+  const vars = ['BOSS_ALLOW', 'BOSS_HUMOR', 'BOSS_CONFIRM_MS']
     .filter((k) => env[k] !== undefined).map((k) => `${k}=${shq(env[k])}`).join(' ');
-  return `env ${vars} BOSS_HOME=${shq(HOME)} BOSS_PORT=${PORT} ${shq(CLAUDE)} --name ${shq(NAME)} --model ${shq(MODEL)} --effort low --setting-sources project,local --settings ${shq(JSON.stringify({ crossSessionInbound: 'accept', autoMemoryEnabled: false }))} --system-prompt-file ${shq(join(WORKDIR, 'BOSS_PROMPT.md'))} --dangerously-load-development-channels server:boss-channel${extra}`;
+  return `env ${vars} BOSS_HOME=${shq(HOME)} BOSS_PORT=${PORT} BOSS_NAME=${shq(NAME)} ${shq(CLAUDE)} --name ${shq(NAME)} --model ${shq(MODEL)} --effort low --setting-sources project,local --settings ${shq(JSON.stringify({ crossSessionInbound: 'accept', autoMemoryEnabled: false }))} --system-prompt-file ${shq(join(WORKDIR, 'BOSS_PROMPT.md'))} --dangerously-load-development-channels server:boss-channel${extra}`;
 }
 
 function shq(s) {

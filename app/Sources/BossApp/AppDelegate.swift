@@ -299,6 +299,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func setupDebugControl(token: @escaping @Sendable () -> String?) {
         let env = ProcessInfo.processInfo.environment
         guard env["BOSS_DEBUG_CONTROL"] == "1" || settings.debugControl else { return }
+        engine.allowSilentAnswerWindow = true
         let server = DebugServer(router: DebugControlRouter(token: token, handler: engine))
         do { try server.start() } catch { NSLog("Boss: debug control could not start: \(error)") }
         debugServer = server
