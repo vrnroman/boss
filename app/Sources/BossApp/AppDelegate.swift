@@ -34,8 +34,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var lastStatus: AppStatus?
     var wasRecording = false
 
-    static let pillSize = NSSize(width: 300, height: 48)
-    static let expandedSize = NSSize(width: 300, height: 480)
+    static let pillSize = NSSize(width: 420, height: 48)
+    static let panelWidth: CGFloat = 420
+    /// Height is Roman's: drag the top or bottom edge; remembered across launches.
+    static var expandedSize: NSSize {
+        let h = UserDefaults.standard.double(forKey: "panelHeight")
+        return NSSize(width: panelWidth, height: h >= 240 ? h : 520)
+    }
 
     func applicationDidFinishLaunching(_ note: Notification) {
         retireOlderInstances()
@@ -79,7 +84,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func setupPanel() {
         let size = Self.pillSize
         let p = FloatingPanel(contentRect: NSRect(origin: .zero, size: size),
-                              styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
+                              styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView, .resizable], backing: .buffered, defer: false)
+        // Only the height can be dragged; the width stays fixed so the layout holds.
+        p.minSize = NSSize(width: Self.panelWidth, height: 240)
+        p.maxSize = NSSize(width: Self.panelWidth, height: 4000)
         p.isFloatingPanel = true
         p.level = .floating
         p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
@@ -127,6 +135,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if showAtLaunch { p.orderFrontRegardless(); engine.panelVisible = true } else { engine.panelVisible = false }
         NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: p, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.saveTopRight() }
+        }
+        NotificationCenter.default.addObserver(forName: NSWindow.didEndLiveResizeNotification, object: p, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.engine.panelExpanded else { return }
+                UserDefaults.standard.set(self.panel.frame.height, forKey: "panelHeight")
+                self.saveTopRight()
+            }
         }
     }
 
