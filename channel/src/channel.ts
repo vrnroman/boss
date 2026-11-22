@@ -1,7 +1,8 @@
 // boss-channel: the bridge between Boss.app (HTTP + SSE on 127.0.0.1) and the Boss Claude Code
 // session (an MCP channel on stdio). It decides nothing about where words go; Boss does.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync, openSync, readSync, closeSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
@@ -131,6 +132,44 @@ export class Channel {
    * Routing context that saves Boss a tool round trip per utterance: the live sessions it may route
    * to (sent by the app, filtered by the allow list) and the last target with its age.
    */
+  topicCache = new Map<string, { mtime: number; topic: string }>();
+
+  /**
+   * What a session has been working on: its last two requests (Roman's own prompts or relayed voice),
+   * read from the local transcript tail. Lets Boss route "make the orbit blue" to the session that is
+   * building the logo instead of asking.
+   */
+  recentTopic(sessionId: string, cwd: string): string {
+    if (!/^[A-Za-z0-9-]{8,80}$/.test(sessionId) || !cwd) return '';
+    const base = process.env.BOSS_CLAUDE_HOME ?? join(homedir(), '.claude');
+    const file = join(base, 'projects', cwd.replace(/[^A-Za-z0-9]/g, '-'), `${sessionId}.jsonl`);
+    let st;
+    try { st = statSync(file); } catch { return ''; }
+    const hit = this.topicCache.get(file);
+    if (hit && hit.mtime === st.mtimeMs) return hit.topic;
+    const len = Math.min(st.size, 400_000);
+    const buf = Buffer.alloc(len);
+    const fd = openSync(file, 'r');
+    try { readSync(fd, buf, 0, len, st.size - len); } finally { closeSync(fd); }
+    const asks: string[] = [];
+    for (const line of buf.toString('utf8').split('\n')) {
+      let d: { type?: string; message?: { content?: unknown } };
+      try { d = JSON.parse(line); } catch { continue; }
+      if (d.type !== 'user') continue;
+      const c = d.message?.content;
+      const texts = typeof c === 'string' ? [c] : Array.isArray(c) ? c.filter((b) => b?.type === 'text').map((b) => String(b.text)) : [];
+      for (let t of texts) {
+        t = t.replace(/<cross-session-message[^>]*>/g, '').replace(/^\s*Roman \(voice[^)]*\):\s*/m, '').replace(/\(When done, SendMessage[^)]*\)/g, '');
+        t = t.replace(/\[Image[^\]]*\]/g, '').replace(/\s+/g, ' ').trim();
+        if (!t || t.startsWith('<') || t.length < 8) continue;
+        asks.push(t.slice(0, 110));
+      }
+    }
+    const topic = asks.slice(-2).map((t) => `"${t.replace(/"/g, "'")}"`).join(' then ');
+    this.topicCache.set(file, { mtime: st.mtimeMs, topic });
+    return topic;
+  }
+
   routingContext(raw: unknown): Record<string, string | undefined> {
     const list = Array.isArray(raw) ? raw : [];
     if (list.length) {
@@ -140,12 +179,13 @@ export class Channel {
     }
     const live = list
       .map((x) => (typeof x === 'object' && x ? (x as Record<string, unknown>) : {}))
-      .map((x) => ({ name: str(x.name, 60).trim(), cwd: str(x.cwd, 300), status: str(x.status, 20) }))
+      .map((x) => ({ name: str(x.name, 60).trim(), cwd: str(x.cwd, 300), status: str(x.status, 20), sessionId: str(x.sessionId, 80) }))
       .filter((x) => x.name && !this.isSelf(x.name) && allowed(this.allow, x.name))
       .slice(0, 30)
       .map((x) => {
         const nick = this.nicknamesBySession()[x.name];
-        return `${nick ? `${nick} = ` : ''}${x.name} (${x.cwd.split('/').filter(Boolean).pop() ?? '-'}, ${x.status || '?'})`;
+        const topic = this.recentTopic(x.sessionId, x.cwd);
+        return `${nick ? `${nick} = ` : ''}${x.name} (${x.cwd.split('/').filter(Boolean).pop() ?? '-'}, ${x.status || '?'}${topic ? `; recently: ${topic}` : ''})`;
       });
     const last = [...this.state.routes].reverse().find((r) => r.sent_at);
     const age = last?.sent_at ? Math.round((this.state.now() - last.sent_at) / 1000) : undefined;

@@ -32,10 +32,11 @@ enum RingLogo {
     }
 
     /// Menu-bar image (18 pt). The band uses the menu bar's text colour; the stone shows state.
-    static func menuBarImage(stone: NSColor) -> NSImage {
+    /// `band` = nil uses the menu bar's text colour; while listening the whole ring turns blue.
+    static func menuBarImage(stone: NSColor, band: NSColor? = nil) -> NSImage {
         let img = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { r in
             // The cut-outs around the session stones are punched through (clear) so any menu bar shows through.
-            draw(in: r.insetBy(dx: 0.5, dy: 0.5), band: .labelColor, stone: stone, cutout: .clear)
+            draw(in: r.insetBy(dx: 0.5, dy: 0.5), band: band ?? .labelColor, stone: stone, cutout: .clear)
             return true
         }
         img.isTemplate = false

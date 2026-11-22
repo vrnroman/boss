@@ -207,7 +207,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             case .offline: return .systemRed
             }
         }()
-        statusItem.button?.image = RingLogo.menuBarImage(stone: stone)
+        // Mic open: the whole ring goes blue, so "listening" is visible at a glance (Roman's ask).
+        statusItem.button?.image = RingLogo.menuBarImage(stone: stone, band: st == .listening ? .systemBlue : nil)
         statusItem.button?.toolTip = "Boss: \(st.rawValue)"
     }
 
@@ -421,6 +422,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             Task { await self.engine.retryTick(now: CACurrentMediaTime()) }
         }
         every(2) { [weak self] in self?.engine.refreshSessions() }
+        // Out of the way unless in use: 75% transparent when the mouse is not over the panel,
+        // fully visible while hovered, while Roman talks, or while a question waits for him.
+        every(0.2) { [weak self] in
+            guard let self, let p = self.panel, p.isVisible else { return }
+            let focused = p.frame.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation)
+                || self.engine.recording != nil || self.engine.status == .waiting
+            let target: CGFloat = focused ? 1.0 : 0.25
+            if abs(p.alphaValue - target) > 0.01 {
+                NSAnimationContext.runAnimationGroup { ctx in ctx.duration = 0.18; p.animator().alphaValue = target }
+            }
+        }
         every(5) { [weak self] in
             guard let self else { return }
             Task { await self.pollHealth(); await self.engine.refreshState() }

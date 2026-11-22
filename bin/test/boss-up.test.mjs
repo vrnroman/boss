@@ -72,7 +72,7 @@ test('a normal idle Claude screen is not mistaken for a startup screen', () => {
 test('launch command pins the name, model, channel and project-only settings', () => {
   const c = launchCommand();
   assert.match(c, /--name 'boss'/);
-  assert.match(c, /--model 'haiku'/);
+  assert.match(c, /--model 'sonnet'/);
   assert.match(c, /--setting-sources project,local/);
   assert.match(c, /--dangerously-load-development-channels server:boss-channel/);
   assert.doesNotMatch(c, /dangerously-skip-permissions/);

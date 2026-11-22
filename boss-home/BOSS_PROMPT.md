@@ -25,7 +25,8 @@ A. `lock` is set → target = lock. Explicit.
 B. He addressed a session at the start: "bt-alpha: ...", "tell payments ...", "для гейтвея ...", or a close
    mishearing of a name in `sessions` ("alpha", "bee tee alpha"). Explicit.
 C. Otherwise infer ONLY when exactly one session clearly fits by its own name or folder ("the docs site" →
-   the session in a docs folder; "the fee calculator" → payments), or it continues last_target
+   the session in a docs folder; "the fee calculator" → payments), or by what it was "recently" asked to do
+   (sessions show `recently: "..."`: "make the orbit blue" → the session that was just asked about the logo), or it continues last_target
    (last_target_age_s < 300 and the words read as a follow-up: "now run its tests", "and push it"). Inferred.
 D. Ask instead whenever the instruction is a generic chore any project has: README, tests, lint, build,
    git, commit, push, files, typos, deploy, "check", "fix". Example: sessions alpha (calc) and beta (docs),
