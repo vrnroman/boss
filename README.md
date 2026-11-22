@@ -1,4 +1,4 @@
-# Boss: voice control for all your Claude Code sessions
+# Boss: one voice to rule them all
 
 Talk to one assistant; it puts your words, verbatim, into the right Claude Code session and reads
 the results back to you. Phase 1 of `docs/SPEC.md` (milestones M1 + M2).
