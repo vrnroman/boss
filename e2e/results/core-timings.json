@@ -1,0 +1,17 @@
+{
+  "at": "2026-11-22T04:35:26.595Z",
+  "timings": [
+    {
+      "label": "Boss cold start (tmux + Claude Code + channel connected)",
+      "ms": 5248
+    },
+    {
+      "label": "ambiguous utterance → question card",
+      "ms": 6252
+    },
+    {
+      "label": "answer → landed",
+      "ms": 7142
+    }
+  ]
+}
