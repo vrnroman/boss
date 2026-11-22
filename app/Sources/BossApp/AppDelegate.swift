@@ -230,6 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
         if !hotkey.isActive {
             menu.addItem(item("Grant Input Monitoring…") { [weak self] in self?.systemAction("grantInputMonitoring") })
+            menu.addItem(item("Restart Boss.app") { [weak self] in self?.relaunchApp() })
         }
         menu.addItem(item("Restart Boss") { [weak self] in self?.restartBoss() })
         menu.addItem(item("Quit Boss") { NSApp.terminate(nil) })
@@ -253,13 +254,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.hotkeyActive = ok && hotkey.isActive
         if engine.hotkeyActive {
             engine.removeCard("sys-hotkey")
+            engine.removeCard("sys-hotkey-relaunch")
+        } else if CGPreflightListenEventAccess() {
+            // Granted in System Settings after launch: macOS only honours it in a new process.
+            relaunchOnceForInputMonitoring()
         } else {
             engine.addSystem("Grant Input Monitoring for the Right Option hotkey. The Talk button works meanwhile.",
                              level: "warning", action: "grantInputMonitoring", key: "hotkey")
         }
     }
 
+    /// Relaunches the app once (per grant) so a new Input Monitoring permission takes effect.
+    func relaunchOnceForInputMonitoring() {
+        let key = "relaunchedForInputMonitoringAt"
+        let last = UserDefaults.standard.double(forKey: key)
+        guard Date().timeIntervalSince1970 - last > 120 else {
+            engine.addSystem("Input Monitoring is on, but the hotkey still cannot start. Quit Boss and open it again.",
+                             level: "warning", action: "relaunchApp", key: "hotkey-relaunch")
+            return
+        }
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: key)
+        relaunchApp()
+    }
+
+    func relaunchApp() {
+        let cfg = NSWorkspace.OpenConfiguration()
+        cfg.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: cfg) { _, _ in
+            DispatchQueue.main.async { NSApp.terminate(nil) }
+        }
+    }
+
     func systemAction(_ a: String) {
+        if a == "relaunchApp" { relaunchApp(); return }
         let urls = [
             "grantInputMonitoring": "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
             "grantMicrophone": "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
