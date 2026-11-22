@@ -106,6 +106,8 @@ public struct ChannelState: Equatable, Sendable {
     public var reports: [String: Report] = [:]
     public var ledger: [String: Ledger] = [:]
     public var humor: Int?
+    /// session name -> the nickname Roman gave it.
+    public var nicknames: [String: String] = [:]
 
     public init() {}
     public init(routes: [Route] = [], questions: [Question] = [], reports: [String: Report] = [:], ledger: [String: Ledger] = [:]) {
@@ -135,6 +137,7 @@ public struct ChannelState: Equatable, Sendable {
                                   graduated: v["graduated"] as? Bool ?? false)
         }
         st.humor = ((o["settings"] as? [String: Any])?["humor"] as? NSNumber)?.intValue
+        st.nicknames = o["nicknames"] as? [String: String] ?? [:]
         return st
     }
 

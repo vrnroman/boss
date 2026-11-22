@@ -38,7 +38,11 @@ export const emptyClasses = (): ClassLedger => ({
   report: { spoken: 0 },
 });
 
-type Persisted = { seq: number; routes: Route[]; questions: Question[]; reports: Record<string, { text: string; at: string }>; ledger: Ledger; utterances: Utterance[]; seen: string[]; classes?: ClassLedger };
+/** A nickname Roman gave a session. Claude Code names cannot be renamed from outside, and derived
+ * names change on restart, so a nickname follows the session's name and, failing that, its folder. */
+export type Nickname = { nickname: string; name: string; cwd: string; at: string };
+
+type Persisted = { seq: number; routes: Route[]; questions: Question[]; reports: Record<string, { text: string; at: string }>; ledger: Ledger; utterances: Utterance[]; seen: string[]; classes?: ClassLedger; nicknames?: Nickname[] };
 
 export class State {
   dir: string;
@@ -50,6 +54,7 @@ export class State {
   reports: Record<string, { text: string; at: string }> = {};
   ledger: Ledger = {};
   classes: ClassLedger = emptyClasses();
+  nicknames: Nickname[] = [];
   utterances: Utterance[] = [];
   seen = new Set<string>();
   listeners = new Set<(e: BossEvent) => void>();
@@ -78,6 +83,7 @@ export class State {
         this.utterances = p.utterances ?? [];
         this.seen = new Set(p.seen ?? []);
         this.classes = { ...emptyClasses(), ...(p.classes ?? {}) };
+        this.nicknames = p.nicknames ?? [];
       } catch { /* a corrupt file starts fresh; events.jsonl still holds the history */ }
     }
     const ev = join(this.dir, 'events.jsonl');
@@ -92,7 +98,7 @@ export class State {
   }
 
   save(): void {
-    const p: Persisted = { seq: this.seq, routes: this.routes.slice(-50), questions: this.questions, reports: this.reports, ledger: this.ledger, utterances: this.utterances.slice(-20), seen: [...this.seen].slice(-1000), classes: this.classes };
+    const p: Persisted = { seq: this.seq, routes: this.routes.slice(-50), questions: this.questions, reports: this.reports, ledger: this.ledger, utterances: this.utterances.slice(-20), seen: [...this.seen].slice(-1000), classes: this.classes, nicknames: this.nicknames };
     const f = join(this.dir, 'channel.json');
     writeFileSync(`${f}.tmp`, JSON.stringify(p), { mode: 0o600 });
     renameSync(`${f}.tmp`, f);

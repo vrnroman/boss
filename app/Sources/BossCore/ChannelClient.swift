@@ -15,7 +15,7 @@ public protocol ChannelAPI: Sendable {
     func postAnswer(questionID: String, text: String) async -> PostResult
     func postUndo(utteranceID: String) async -> PostResult
     func cancelRoute(routeID: String) async -> PostResult
-    func getState() async -> ChannelState?
+    func getState(sessions: [SessionInfo]) async -> ChannelState?
     func health() async -> Bool?   // boss_connected, nil = channel unreachable
 }
 
@@ -72,8 +72,15 @@ public struct ChannelClient: ChannelAPI {
     public func cancelRoute(routeID: String) async -> PostResult {
         await post("/cancel_route", ["route_id": routeID])
     }
-    public func getState() async -> ChannelState? {
-        guard let r = try? await transport.send(request("GET", "/state")), r.status == 200 else { return nil }
+    /// The live sessions ride along so the channel can resolve nicknames even before any utterance.
+    public func getState(sessions: [SessionInfo]) async -> ChannelState? {
+        var path = "/state"
+        if !sessions.isEmpty,
+           let d = try? JSONSerialization.data(withJSONObject: sessions.map { ["name": $0.name, "cwd": $0.cwd, "status": $0.status] }),
+           let q = String(data: d, encoding: .utf8)?.addingPercentEncoding(withAllowedCharacters: .alphanumerics) {
+            path += "?sessions=\(q)"
+        }
+        guard let r = try? await transport.send(request("GET", path)), r.status == 200 else { return nil }
         return ChannelState.decode(r.body)
     }
     public func health() async -> Bool? {

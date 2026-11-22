@@ -365,9 +365,11 @@ struct TowerRowView: View {
             RoundedRectangle(cornerRadius: 1.5).fill(color).frame(width: 3, height: row.detail == nil ? 16 : 26)
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 6) {
-                    Text(row.name).font(.system(size: 12, weight: .semibold))
+                    Text(row.nickname ?? row.name).font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(row.group == .idle ? .white.opacity(0.55) : .white.opacity(0.95))
-                    if row.cwdBase != row.name {
+                    if row.nickname != nil {
+                        Text(row.name).font(.system(size: 10)).foregroundStyle(Palette.tertiary).lineLimit(1)
+                    } else if row.cwdBase != row.name {
                         Text(row.cwdBase).font(.system(size: 10)).foregroundStyle(Palette.tertiary).lineLimit(1)
                     }
                 }

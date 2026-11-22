@@ -159,6 +159,18 @@ test('status: "what is everyone doing" is answered by Boss itself without messag
   assert.ok(pane('bt-alpha').length - before < 400, 'no new message landed in bt-beta');
 });
 
+test('rename: "rename bt-alpha to calc" saves a nickname, then "calc, ..." lands in bt-alpha', async () => {
+  const { t0 } = await speak('Rename bt-alpha to calc.', { lang: 'en' });
+  const said = await c.until((e) => e.event === 'say' && e.t > t0 && /calc/i.test(e.data.text), 60_000, 'rename confirmation');
+  assert.ok(said);
+  assert.deepEqual((await c.http('GET', '/state')).json.nicknames, { 'bt-alpha': 'calc' });
+  const { id } = await speak('Calc, create a file named nick.txt containing the word nickname.', { lang: 'en' });
+  const routed = await c.until((e) => e.event === 'routed' && e.data.utterance_id === id && e.data.status === 'sent', 60_000, 'routed via nickname');
+  assert.equal(routed.data.target, 'bt-alpha');
+  for (let i = 0; i < 60 && !existsSync(join(W.alpha, 'nick.txt')); i++) await sleep(1000);
+  assert.ok(existsSync(join(W.alpha, 'nick.txt')));
+});
+
 test('outbox safety: an utterance sent while Boss is down is refused (503), then lands once after restart', async () => {
   assert.equal(bossUp('stop').code, 0);
   await sleep(1000);
