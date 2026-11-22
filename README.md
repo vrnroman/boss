@@ -15,7 +15,7 @@ the results back to you. Phase 1 of `docs/SPEC.md` (milestones M1 + M2).
 ```
 
 ## Use
-- Hold **Right Option** (or the panel's **Hold to talk**) and speak: "payments: run the tests".
+- Talk with **Right Option** (home: hold it), **Left Option + Space** (office: no permissions needed) or the panel's **Talk** button. Hold and release to send, or tap once to start and tap again to send. Esc cancels.
   Release sends. English and Russian both work.
 - Name the session first for a direct send. Without a name Boss infers the session and gives you
   2.5 s to cancel ("→ site (docs topic)"); a session that was right 10 times in a row skips that

@@ -95,6 +95,22 @@ public final class BossEngine {
     public private(set) var answerWindow: AnswerWindow?
     /// Debug control only: keep a 6 s answer window even without mic permission (see openAnswerWindow).
     public var allowSilentAnswerWindow = false
+    /// Hold-or-toggle state for the panel button and ⌥Space (see TalkPress).
+    public private(set) var talkPress = TalkPress()
+    /// True while a toggle recording waits for the second tap.
+    public var talkLatched: Bool { talkPress.latched && recording != nil }
+
+    public func talkControlDown(source: TalkSource) {
+        switch talkPress.press(at: deps.clock().timeIntervalSince1970) {
+        case .start: if !beginTalk(source: source) { talkPress.reset() }
+        case .stop: endTalkDetached()
+        case .none: break
+        }
+    }
+
+    public func talkControlUp(source: TalkSource) {
+        if talkPress.release(at: deps.clock().timeIntervalSince1970) == .stop { endTalkDetached() }
+    }
     private var speechToken = 0
     /// The language Roman speaks ("en" | "ru"), shown and switched in the panel.
     public var language: String = "en" {
@@ -257,6 +273,7 @@ public final class BossEngine {
 
     /// Stops the mic synchronously and returns what was captured.
     func finishRecording() -> (Recording, [Int16])? {
+        talkPress.reset()
         guard let r = recording else { return nil }
         let samples = deps.recorder.stop()
         recording = nil
@@ -293,6 +310,7 @@ public final class BossEngine {
     public func endTalkDetached() { Task { await endTalk() } }
 
     public func cancelTalk() {
+        talkPress.reset()
         guard let r = recording else { return }
         deps.recorder.cancel()
         recording = nil

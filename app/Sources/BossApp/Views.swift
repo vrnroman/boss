@@ -228,16 +228,17 @@ struct SectionHeader: View {
 
 struct ControlsRow: View {
     let engine: BossEngine
-    @State private var pressing = false
+    @State private var down = false
 
     var body: some View {
+        let live = engine.recording != nil
         HStack(spacing: 6) {
-            // Press-and-hold Talk
+            // Talk: hold and release to send, or click once to start and click again to send.
             HStack(spacing: 8) {
-                Image(systemName: pressing ? "waveform" : "mic.fill")
+                Image(systemName: live ? "waveform" : "mic.fill")
                     .font(.system(size: 14, weight: .semibold))
-                    .symbolEffect(.variableColor.iterative, isActive: pressing)
-                Text(pressing ? "Release" : "Hold to talk")
+                    .symbolEffect(.variableColor.iterative, isActive: live)
+                Text(engine.talkLatched ? "Click to send" : live ? "Release to send" : "Talk")
                     .font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(.white)
@@ -245,23 +246,23 @@ struct ControlsRow: View {
             .frame(height: 30)
             .background(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(pressing ? Palette.listening : Color.white.opacity(0.10))
+                    .fill(live ? Palette.listening : Color.white.opacity(0.10))
             )
-            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(Color.white.opacity(pressing ? 0.0 : 0.10)))
-            .scaleEffect(pressing ? 0.98 : 1)
-            .animation(.easeOut(duration: 0.12), value: pressing)
+            .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(Color.white.opacity(live ? 0.0 : 0.10)))
+            .scaleEffect(down ? 0.98 : 1)
+            .animation(.easeOut(duration: 0.12), value: down)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { _ in
-                        if !pressing { pressing = true; engine.beginTalk(source: .button) }
+                        if !down { down = true; engine.talkControlDown(source: .button) }
                     }
                     .onEnded { _ in
-                        pressing = false
-                        engine.endTalkDetached()
+                        down = false
+                        engine.talkControlUp(source: .button)
                     }
             )
-            .help("Press and hold to talk (or hold Right Option)")
+            .help("Click to start and click to send, or hold and release. Keys: hold Right Option, or Left Option + Space")
 
             LanguageToggle(engine: engine)
             IconButton(symbol: engine.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
