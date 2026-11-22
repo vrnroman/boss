@@ -55,6 +55,37 @@ struct EngineTests {
         #expect(!rig.channel.paths.contains("/utterance"))
     }
 
+    func report(_ text: String, id: String = "s1") -> ChannelEvent {
+        .say(SayEvent(id: id, text: text, links: [], speak: true, session: "payments", lang: "en", kind: "report", at: nil))
+    }
+
+    @Test func talkingOverBossStopsItAndItIsSaidAgainAfterTheCommandIsSent() async {
+        let rig = Rig()
+        rig.speaker.duration = 5
+        rig.engine.handle(report("payments: all green"))
+        #expect(await eventually { rig.speaker.spoken == ["payments: all green"] })
+        _ = rig.engine.beginTalk(source: .button)
+        #expect(rig.speaker.stopped == 1)
+        rig.speaker.duration = 0
+        _ = await rig.engine.endTalk()
+        #expect(rig.channel.paths.contains("/utterance"))
+        #expect(await eventually { rig.speaker.spoken == ["payments: all green", "payments: all green"] })
+    }
+
+    @Test func nothingIsSaidOrChimedWhileRomanTalksOnlyAfterHisCommandIsSent() async {
+        let rig = Rig()
+        _ = rig.engine.beginTalk(source: .button)
+        let chimesBefore = rig.sounds.played.count
+        rig.engine.handle(report("gateway: migrations done", id: "s2"))
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(rig.speaker.spoken.isEmpty)
+        #expect(rig.sounds.played.count == chimesBefore + 0)
+        // his words go out first (endTalk returns after the post), then Boss speaks
+        _ = await rig.engine.endTalk()
+        #expect(rig.channel.paths.contains("/utterance"))
+        #expect(await eventually { rig.speaker.spoken == ["payments: gateway: migrations done"] })
+    }
+
     @Test func whisperAlwaysGetsTheChosenLanguageNeverAuto() async {
         let rig = Rig()
         rig.engine.deps.settings.languageLock = "auto"          // an old setting
