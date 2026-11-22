@@ -171,6 +171,19 @@ test('rename: "rename bt-alpha to calc" saves a nickname, then "calc, ..." lands
   assert.ok(existsSync(join(W.alpha, 'nick.txt')));
 });
 
+test('auto-retry: a send to a session that has gone away is tried 4 times before Roman hears it failed', async () => {
+  const ghost = { name: 'bt-ghost', cwd: '/tmp/bt-ghost', status: 'idle' };
+  const id = `e2e_${process.pid}_ghost`;
+  const t0 = Date.now();
+  const r = await c.http('POST', '/utterance', { id, text: 'bt-ghost: create a file named boo.txt.', mode: 'talk', sessions: [...liveSessions(), ghost] });
+  assert.equal(r.status, 202);
+  const failed = await c.until((e) => e.event === 'routed' && e.data.utterance_id === id && e.data.status === 'failed', 120_000, 'routed failed');
+  const tries = readFileSync(join(home.dir, 'logs', 'guard.log'), 'utf8').split('\n').filter((l) => l.includes('"bt-ghost"')).length;
+  assert.ok(tries >= 4, `SendMessage attempts to bt-ghost: ${tries}`);
+  assert.match(failed.data.note ?? '', /4 tries/i);
+  await c.until((e) => e.event === 'say' && e.t > t0 && /ghost/i.test(e.data.text), 30_000, 'failure spoken');
+});
+
 test('outbox safety: an utterance sent while Boss is down is refused (503), then lands once after restart', async () => {
   assert.equal(bossUp('stop').code, 0);
   await sleep(1000);

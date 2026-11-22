@@ -1,9 +1,9 @@
 {
-  "at": "2026-11-22T09:22:20.062Z",
+  "at": "2026-11-22T09:32:54.764Z",
   "timings": [
     {
       "label": "Boss cold start (tmux + Claude Code + channel connected)",
-      "ms": 4066
+      "ms": 4064
     }
   ]
 }
