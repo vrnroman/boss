@@ -60,7 +60,7 @@ public struct ChannelClient: ChannelAPI {
         var b: [String: Any] = ["id": id, "text": text, "mode": mode]
         if let lang { b["lang"] = lang }
         // Live sessions (same filter as the tower) so Boss can route without a tool round trip.
-        b["sessions"] = sessions.map { ["name": $0.name, "cwd": $0.cwd, "status": $0.status] }
+        b["sessions"] = sessions.map { ["name": $0.name, "cwd": $0.cwd, "status": $0.status, "sessionId": $0.sessionId] }
         return await post("/utterance", b)
     }
     public func postAnswer(questionID: String, text: String) async -> PostResult {
@@ -76,7 +76,7 @@ public struct ChannelClient: ChannelAPI {
     public func getState(sessions: [SessionInfo]) async -> ChannelState? {
         var path = "/state"
         if !sessions.isEmpty,
-           let d = try? JSONSerialization.data(withJSONObject: sessions.map { ["name": $0.name, "cwd": $0.cwd, "status": $0.status] }),
+           let d = try? JSONSerialization.data(withJSONObject: sessions.map { ["name": $0.name, "cwd": $0.cwd, "status": $0.status, "sessionId": $0.sessionId] }),
            let q = String(data: d, encoding: .utf8)?.addingPercentEncoding(withAllowedCharacters: .alphanumerics) {
             path += "?sessions=\(q)"
         }

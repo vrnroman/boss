@@ -564,3 +564,30 @@ describe('nicknames', () => {
     await h.stop();
   });
 });
+
+describe('session context', () => {
+  test('Boss sees what each session was recently asked, read from its transcript tail', async () => {
+    const { mkdirSync, writeFileSync } = await import('node:fs');
+    const h0 = new Harness();
+    const claude = join(h0.home, 'claude');
+    const cwd = '/Users/r/Documents/selected/boss';
+    const dir = join(claude, 'projects', cwd.replace(/[^A-Za-z0-9]/g, '-'));
+    mkdirSync(dir, { recursive: true });
+    const sid = '51cff7f8-939e-4c0f-8adf-4ef08ac74712';
+    const lines = [
+      { type: 'user', message: { content: 'make the boss panel more compact' } },
+      { type: 'assistant', message: { content: [{ type: 'text', text: 'done' }] } },
+      { type: 'user', message: { content: [{ type: 'tool_result', content: 'x' }] } },
+      { type: 'user', message: { content: [{ type: 'text', text: '<cross-session-message from=\"boss\">\nRoman (voice):\nI want a better logo, the ring\n(When done, SendMessage me a REPORT / SPOKEN / LINKS block, SPOKEN in English.)' }] } },
+    ];
+    writeFileSync(join(dir, `${sid}.jsonl`), lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
+    const h = await h0.start({ BOSS_CLAUDE_HOME: claude });
+    await h.connect();
+    await h.post('/utterance', { id: 'ctx9', text: 'make the orbit blue', sessions: [{ name: 'boss-88', cwd, status: 'idle', sessionId: sid }, { name: 'guard-29', cwd: '/w/guard', status: 'idle', sessionId: 'aaaaaaaa-0000' }] });
+    const m = await h.wait((x) => x.params?.meta?.utterance_id === 'ctx9');
+    assert.match(m.params.meta.sessions, /boss-88 \(boss, idle; recently: "make the boss panel more compact" then "I want a better logo, the ring"\)/);
+    assert.match(m.params.meta.sessions, /guard-29 \(guard, idle\)/);
+    assert.doesNotMatch(m.params.meta.sessions, /SendMessage me a REPORT/);
+    await h.stop();
+  });
+});

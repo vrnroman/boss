@@ -590,12 +590,36 @@ struct FlowChoices: View {
     let choices: [String]
     let tap: (String) -> Void
     var body: some View {
-        HStack(spacing: 6) {
+        // A real flow layout: buttons keep their names on one line and wrap to the next row as a whole.
+        WrapLayout(spacing: 6) {
             ForEach(choices, id: \.self) { c in
-                Button(c) { tap(c) }
+                Button { tap(c) } label: { Text(c).lineLimit(1).fixedSize() }
                     .font(.system(size: 12, weight: .semibold))
                     .buttonStyle(ChoiceButtonStyle())
             }
+        }
+    }
+}
+
+struct WrapLayout: Layout {
+    var spacing: CGFloat = 6
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxW = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, rowH: CGFloat = 0, widest: CGFloat = 0
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+            if x > 0 && x + s.width > maxW { y += rowH + spacing; x = 0; rowH = 0 }
+            x += s.width + spacing; rowH = max(rowH, s.height); widest = max(widest, x - spacing)
+        }
+        return CGSize(width: min(widest, maxW), height: y + rowH)
+    }
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, rowH: CGFloat = 0
+        for v in subviews {
+            let s = v.sizeThatFits(.unspecified)
+            if x > bounds.minX && x + s.width > bounds.maxX { y += rowH + spacing; x = bounds.minX; rowH = 0 }
+            v.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(s))
+            x += s.width + spacing; rowH = max(rowH, s.height)
         }
     }
 }
@@ -604,7 +628,7 @@ struct ChoiceButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundStyle(Color.black.opacity(0.85))
-            .padding(.horizontal, 12).padding(.vertical, 6)
+            .padding(.horizontal, 9).padding(.vertical, 5)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.waiting.opacity(configuration.isPressed ? 0.7 : 0.95)))
     }
 }

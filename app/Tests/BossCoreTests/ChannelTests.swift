@@ -27,7 +27,7 @@ struct ChannelClientTests {
         #expect(b["mode"] as? String == "talk")
         #expect(b["lang"] as? String == "en")
         let ss = b["sessions"] as? [[String: String]]
-        #expect(ss == [["name": "payments", "cwd": "/a/payments", "status": "busy"]])
+        #expect(ss == [["name": "payments", "cwd": "/a/payments", "status": "busy", "sessionId": ""]])
     }
 
     @Test func statusMapping() async {

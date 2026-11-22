@@ -26,7 +26,7 @@ const DEFAULT_HOME = join(homedir(), 'Boss');
 const SOCK = env.BOSS_TMUX_SOCKET ?? (HOME === DEFAULT_HOME ? 'boss' : `boss-${createHash('sha1').update(HOME).digest('hex').slice(0, 8)}`);
 const SESS = env.BOSS_TMUX_SESSION ?? 'boss';
 const NAME = env.BOSS_NAME ?? 'boss';
-const MODEL = env.BOSS_MODEL ?? 'haiku';
+const MODEL = env.BOSS_MODEL ?? 'sonnet';   // measured: with session context Sonnet routed 5/5 and decided faster than Haiku
 const CLAUDE = env.BOSS_CLAUDE ?? 'claude';
 const TMUX = existsSync('/opt/homebrew/bin/tmux') ? '/opt/homebrew/bin/tmux' : 'tmux';
 const WORKDIR = env.BOSS_WORKDIR ?? join(HOME, 'boss');
