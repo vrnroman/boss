@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     static let expandedSize = NSSize(width: 380, height: 640)
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        retireOlderInstances()
         try? FileManager.default.createDirectory(at: paths.outbox, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: paths.logs, withIntermediateDirectories: true)
         let paths = self.paths
@@ -277,12 +278,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         relaunchApp()
     }
 
+    /// Newest instance wins: one panel, one hotkey, one mic. Older copies (a relaunch, a launchd
+    /// restart, a stray left by an unload) are asked to quit, then forced after 2 s.
+    func retireOlderInstances() {
+        guard let id = Bundle.main.bundleIdentifier else { return }
+        let me = ProcessInfo.processInfo.processIdentifier
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: id).filter { $0.processIdentifier != me }
+        for app in others { app.terminate() }
+        if !others.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                for app in others where !app.isTerminated { app.forceTerminate() }
+            }
+        }
+    }
+
     func relaunchApp() {
+        // Installed: let launchd restart it, so crash-restart protection stays on.
+        let label = "gui/\(getuid())/com.roman.boss.app"
+        let check = Process()
+        check.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        check.arguments = ["print", label]
+        check.standardOutput = FileHandle.nullDevice; check.standardError = FileHandle.nullDevice
+        if (try? check.run()) != nil { check.waitUntilExit() }
+        if check.terminationStatus == 0 {
+            let k = Process()
+            k.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+            k.arguments = ["kickstart", "-k", label]
+            if (try? k.run()) != nil { return }
+        }
+        // Not installed: open a new instance; it retires this one (retireOlderInstances) once it is up.
         let cfg = NSWorkspace.OpenConfiguration()
         cfg.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: cfg) { _, _ in
-            DispatchQueue.main.async { NSApp.terminate(nil) }
-        }
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: cfg) { _, _ in }
     }
 
     func systemAction(_ a: String) {

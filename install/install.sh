@@ -87,6 +87,8 @@ fi
 if [ "$APP" = 1 ]; then
   BOSS_BUNDLE_ID=com.roman.boss sh "$REPO/app/scripts/build-app.sh" >/dev/null
   mkdir -p "$APP_DIR"
+  launchctl bootout "gui/$(id -u)/com.roman.boss.app" 2>/dev/null || true
+  pkill -f "^$APP_DIR/Boss.app/Contents/MacOS/Boss" 2>/dev/null || true   # strays an unload left behind
   rm -rf "$APP_DIR/Boss.app"
   cp -R "$REPO/app/build/Boss.app" "$APP_DIR/Boss.app"
   KC="$BOSS_HOME/signing/boss-signing.keychain-db"
