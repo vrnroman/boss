@@ -22,7 +22,23 @@ export function graduated(e: { blind: number; misses: number } | undefined): boo
   return e.blind >= 10 && e.misses * 10 <= e.blind;
 }
 
-type Persisted = { seq: number; routes: Route[]; questions: Question[]; reports: Record<string, { text: string; at: string }>; ledger: Ledger; utterances: Utterance[]; seen: string[] };
+/** Trust ledger by action class (v1), read by other systems from state/trust-ledger.v1.json. */
+export type ClassLedger = {
+  route_explicit: { sent: number; undone: number };
+  route_inferred: { proposed: number; auto: number; sent: number; cancelled: number; undone: number };
+  routing_question: { asked: number; answered: number };
+  worker_question: { asked: number; answered: number };
+  report: { spoken: number };
+};
+export const emptyClasses = (): ClassLedger => ({
+  route_explicit: { sent: 0, undone: 0 },
+  route_inferred: { proposed: 0, auto: 0, sent: 0, cancelled: 0, undone: 0 },
+  routing_question: { asked: 0, answered: 0 },
+  worker_question: { asked: 0, answered: 0 },
+  report: { spoken: 0 },
+});
+
+type Persisted = { seq: number; routes: Route[]; questions: Question[]; reports: Record<string, { text: string; at: string }>; ledger: Ledger; utterances: Utterance[]; seen: string[]; classes?: ClassLedger };
 
 export class State {
   dir: string;
@@ -33,6 +49,7 @@ export class State {
   questions: Question[] = [];
   reports: Record<string, { text: string; at: string }> = {};
   ledger: Ledger = {};
+  classes: ClassLedger = emptyClasses();
   utterances: Utterance[] = [];
   seen = new Set<string>();
   listeners = new Set<(e: BossEvent) => void>();
@@ -60,6 +77,7 @@ export class State {
         this.ledger = p.ledger ?? {};
         this.utterances = p.utterances ?? [];
         this.seen = new Set(p.seen ?? []);
+        this.classes = { ...emptyClasses(), ...(p.classes ?? {}) };
       } catch { /* a corrupt file starts fresh; events.jsonl still holds the history */ }
     }
     const ev = join(this.dir, 'events.jsonl');
@@ -74,10 +92,23 @@ export class State {
   }
 
   save(): void {
-    const p: Persisted = { seq: this.seq, routes: this.routes.slice(-50), questions: this.questions, reports: this.reports, ledger: this.ledger, utterances: this.utterances.slice(-20), seen: [...this.seen].slice(-1000) };
+    const p: Persisted = { seq: this.seq, routes: this.routes.slice(-50), questions: this.questions, reports: this.reports, ledger: this.ledger, utterances: this.utterances.slice(-20), seen: [...this.seen].slice(-1000), classes: this.classes };
     const f = join(this.dir, 'channel.json');
     writeFileSync(`${f}.tmp`, JSON.stringify(p), { mode: 0o600 });
     renameSync(`${f}.tmp`, f);
+    const t = join(this.dir, 'trust-ledger.v1.json');
+    writeFileSync(`${t}.tmp`, JSON.stringify(this.classLedgerView(), null, 2), { mode: 0o600 });
+    renameSync(`${t}.tmp`, t);
+  }
+
+  /** Bumps one counter of one action class and persists. */
+  bump<K extends keyof ClassLedger>(cls: K, field: keyof ClassLedger[K]): void {
+    (this.classes[cls] as Record<string, number>)[field as string] += 1;
+    this.save();
+  }
+
+  classLedgerView(): { version: 1; updated_at: string; classes: ClassLedger; by_session: Record<string, { blind: number; misses: number; graduated: boolean }> } {
+    return { version: 1, updated_at: this.iso(), classes: this.classes, by_session: this.ledgerView() };
   }
 
   emit(type: string, data: Record<string, unknown>): BossEvent {

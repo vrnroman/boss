@@ -68,7 +68,7 @@ describe('MCP handshake', () => {
     assert.equal(init.result.protocolVersion, '2025-11-25');
     assert.match(init.result.instructions, /say and ask/);
     const list = await h.rpc('tools/list');
-    assert.deepEqual(list.result.tools.map((t: any) => t.name).sort(), ['ask', 'route', 'routed', 'say', 'state']);
+    assert.deepEqual(list.result.tools.map((t: any) => t.name).sort(), ['ask', 'radio', 'route', 'routed', 'say', 'state']);
   });
 
   test('never negotiates 2026-07-28 (not registered as a channel there)', async () => {
@@ -414,6 +414,75 @@ describe('routing context', () => {
     const h = await new Harness().start({ BOSS_ALLOW: 'bt-*' });
     const init = await h.connect();
     assert.match(init.result.instructions, /match: bt-\*/);
+    await h.stop();
+  });
+});
+
+describe('trust ledger by action class (v1)', () => {
+  test('every class is counted, served at /ledger and written to state/trust-ledger.v1.json', async () => {
+    const h = await new Harness().start({ BOSS_CONFIRM_MS: '200', BOSS_ALLOW: 'bt-*' });
+    await h.connect();
+    await h.post('/utterance', { id: 'l1', text: 'x' });
+    await h.call('routed', { utterance_id: 'l1', target: 'bt-a', status: 'sent' });            // explicit sent
+    await h.call('route', { utterance_id: 'l2', target: 'bt-b', explicit: false });          // proposed
+    await h.call('routed', { utterance_id: 'l2', target: 'bt-b', status: 'sent' });          // inferred sent
+    await h.post('/undo', { utterance_id: 'l2' });                                            // inferred undone
+    const s = h.sse(); await s.ready;
+    const p = h.call('route', { utterance_id: 'l3', target: 'bt-b', explicit: false });
+    const c = await s.until((e) => e.event === 'confirm' && e.data.utterance_id === 'l3');
+    await h.post('/cancel_route', { route_id: c.data.route_id });                             // cancelled
+    await p; s.close();
+    const q1 = await h.call('ask', { question: 'a or b?', choices: ['a', 'b'], about_id: 'l3' }); // routing q
+    await h.post('/answer', { question_id: q1.question_id, text: 'a' });
+    await h.call('ask', { question: 'red or blue?', session: 'bt-a' });                       // worker q, unanswered
+    await h.call('say', { text: 'bt-a: done', session: 'bt-a', kind: 'report' });
+    const l = (await h.get('/ledger')).json;
+    assert.equal(l.version, 1);
+    assert.deepEqual(l.classes.route_explicit, { sent: 1, undone: 0 });
+    assert.deepEqual(l.classes.route_inferred, { proposed: 2, auto: 0, sent: 1, cancelled: 1, undone: 1 });
+    assert.deepEqual(l.classes.routing_question, { asked: 1, answered: 1 });
+    assert.deepEqual(l.classes.worker_question, { asked: 1, answered: 0 });
+    assert.deepEqual(l.classes.report, { spoken: 1 });
+    const file = JSON.parse(readFileSync(join(h.home, 'state', 'trust-ledger.v1.json'), 'utf8'));
+    assert.deepEqual(file.classes, l.classes);
+    assert.ok(file.by_session['bt-b']);
+    await h.stop();
+    const h2 = await new Harness(h.home).start();
+    assert.deepEqual((await h2.get('/ledger')).json.classes.route_inferred, l.classes.route_inferred, 'survives restart');
+    await h2.stop();
+  });
+});
+
+describe('radio', () => {
+  test('radio() runs the recap in the background and confirms on the panel; a second call while running is refused', async () => {
+    const { writeFileSync } = await import('node:fs');
+    const h0 = new Harness();
+    const fake = join(h0.home, 'fake-radio.mjs');
+    writeFileSync(fake, "setTimeout(() => console.log(JSON.stringify({ ok: true, sent: true, reports: 3, seconds: 41 })), 300);");
+    const h = await h0.start({ BOSS_RADIO_CMD: fake });
+    await h.connect();
+    const s = h.sse(); await s.ready;
+    assert.match(await h.call('radio', {}), /making the radio recap/);
+    assert.match(await h.call('radio', {}), /already/);
+    const e = await s.until((e) => e.event === 'say' && /Radio recap sent/.test(e.data.text), 5000);
+    assert.match(e.data.text, /3 reports, 41 seconds/);
+    assert.equal(e.data.speak, false);
+    s.close();
+    await h.stop();
+  });
+
+  test('a failing recap says so, out loud', async () => {
+    const { writeFileSync } = await import('node:fs');
+    const h0 = new Harness();
+    const fake = join(h0.home, 'bad-radio.mjs');
+    writeFileSync(fake, "process.stderr.write('boom'); process.exit(1);");
+    const h = await h0.start({ BOSS_RADIO_CMD: fake });
+    await h.connect();
+    const s = h.sse(); await s.ready;
+    await h.call('radio', {});
+    const e = await s.until((e) => e.event === 'say' && /failed/.test(e.data.text), 5000);
+    assert.equal(e.data.speak, true);
+    s.close();
     await h.stop();
   });
 });

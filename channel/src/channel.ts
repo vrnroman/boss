@@ -1,7 +1,9 @@
 // boss-channel: the bridge between Boss.app (HTTP + SSE on 127.0.0.1) and the Boss Claude Code
 // session (an MCP channel on stdio). It decides nothing about where words go; Boss does.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { appendFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { timingSafeEqual } from 'node:crypto';
 import type { Readable, Writable } from 'node:stream';
@@ -146,6 +148,34 @@ export class Channel {
     };
   }
 
+  radioRunning = false;
+
+  /** Runs bin/boss-radio.mjs (or BOSS_RADIO_CMD in tests) and reports the outcome as a panel card. */
+  startRadio(hours?: number): string {
+    if (this.radioRunning) return 'a radio recap is already being made';
+    const here = fileURLToPath(new URL('.', import.meta.url));
+    const script = process.env.BOSS_RADIO_CMD ?? [join(here, '..', '..', 'bin', 'boss-radio.mjs'), join(here, '..', '..', '..', 'bin', 'boss-radio.mjs')].find((p) => existsSync(p));
+    if (!script) throw new ToolError('boss-radio is not installed');
+    this.radioRunning = true;
+    const args = [script, ...(hours ? ['--hours', String(hours)] : [])];
+    const child = spawn(process.execPath, args, { env: { ...process.env, BOSS_HOME: this.opts.home }, stdio: ['ignore', 'pipe', 'pipe'] });
+    let out = '';
+    let err = '';
+    child.stdout.on('data', (d) => (out += d));
+    child.stderr.on('data', (d) => (err += d));
+    child.on('close', (code) => {
+      this.radioRunning = false;
+      let r: { sent?: boolean; reports?: number; seconds?: number } = {};
+      try { r = JSON.parse(out.trim().split('\n').pop() ?? '{}'); } catch { /* reported below */ }
+      this.log('radio', { code, reports: r.reports, seconds: r.seconds, sent: r.sent, error: code ? err.slice(0, 200) : undefined });
+      const text = code === 0
+        ? (r.sent ? `Radio recap sent to your phone: ${r.reports ?? 0} reports, ${r.seconds ?? 0} seconds.` : `Radio recap ready (${r.seconds ?? 0} s), not sent.`)
+        : 'Radio recap failed. The reports are still in the panel.';
+      this.state.emit('say', { id: `say_${this.state.seq + 1}`, text, links: [], speak: code !== 0, kind: 'info' });
+    });
+    return 'making the radio recap now; the panel confirms when it is sent';
+  }
+
   isSelf(name: string): boolean {
     return name === 'boss' || name === this.selfName;
   }
@@ -174,7 +204,7 @@ export class Channel {
         if (!text) throw new ToolError('text is empty');
         const kind = ['report', 'status', 'info'].includes(str(a.kind)) ? str(a.kind) : 'info';
         const session = str(a.session, 100) || undefined;
-        if (session && kind === 'report') s.setReport(session, text);
+        if (session && kind === 'report') { s.setReport(session, text); s.bump('report', 'spoken'); }
         const e = s.emit('say', { id: `say_${s.seq + 1}`, text, links: normLinks(a.links), speak: a.speak !== false, session, lang: str(a.lang) === 'ru' ? 'ru' : str(a.lang) === 'en' ? 'en' : undefined, kind });
         return `said (event ${e.seq})`;
       },
@@ -190,6 +220,7 @@ export class Channel {
         if (!question) throw new ToolError('question is empty');
         const choices = Array.isArray(a.choices) ? a.choices.map((c) => str(c, 80).trim()).filter(Boolean).slice(0, 6) : [];
         const q = s.addQuestion({ question, choices, about_id: str(a.about_id, 80) || undefined, session: str(a.session, 100) || undefined, lang: str(a.lang) || undefined });
+        s.bump(q.about_id ? 'routing_question' : 'worker_question', 'asked');
         s.emit('ask', { question_id: q.question_id, question, choices, about_id: q.about_id, session: q.session, lang: q.lang });
         return JSON.stringify({ question_id: q.question_id });
       },
@@ -208,6 +239,7 @@ export class Channel {
         const explicit = a.explicit === true;
         const r = s.addRoute({ utterance_id, target, explicit, reason: str(a.reason, 200) });
         const trusted = explicit || graduated(s.ledger[target]);
+        if (!explicit) s.bump('route_inferred', trusted ? 'auto' : 'proposed');
         let decision: 'send' | 'cancelled' = 'send';
         if (!trusted) {
           s.emit('confirm', { route_id: r.route_id, utterance_id, target, reason: r.reason, window_ms: this.confirmWindowMs });
@@ -238,12 +270,18 @@ export class Channel {
         if (r && (status === 'sent' || status === 'delivered') && !r.sent_at) {
           r.sent_at = s.now();
           r.status = status;
-          if (!r.explicit) s.countBlind(target);
-          else s.save();
+          if (!r.explicit) { s.countBlind(target); s.bump('route_inferred', 'sent'); }
+          else s.bump('route_explicit', 'sent');
         }
         s.emit('routed', { utterance_id, target, status, note: str(a.note, 300) || undefined });
         return 'ok';
       },
+    });
+    this.mcp.addTool({
+      name: 'radio',
+      description: 'Roman said "radio me": render a spoken team-radio recap of recent reports and open questions and send it to his phone (Telegram audio). Runs in the background; the panel confirms when it is sent. hours = how far back (optional).',
+      inputSchema: { type: 'object', properties: { hours: { type: 'number' } } },
+      handler: (a) => this.startRadio(typeof a.hours === 'number' && a.hours > 0 ? Math.min(a.hours, 48) : undefined),
     });
     this.mcp.addTool({
       name: 'state',
@@ -312,6 +350,8 @@ export class Channel {
           return this.send(res, 200, { ok: true, boss_connected: this.mcp.initialized, version: this.opts.version ?? '1.0.0', uptime_s: Math.round((Date.now() - this.started) / 1000) });
         case 'GET /state':
           return this.send(res, 200, this.stateView());
+        case 'GET /ledger':
+          return this.send(res, 200, s.classLedgerView());
         case 'GET /events': {
           const since = Number(req.headers['last-event-id'] ?? url.searchParams.get('since') ?? s.seq);
           res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
@@ -344,6 +384,7 @@ export class Channel {
           if (!this.mcp.initialized) return this.send(res, 503, { error: 'boss offline' });
           const q = s.takeQuestion(str(b.question_id, 80));
           if (!q) return this.send(res, 404, { error: 'no such pending question' });
+          s.bump(q.about_id ? 'routing_question' : 'worker_question', 'answered');
           const original = q.about_id ? s.utterances.find((u) => u.id === q.about_id)?.text : undefined;
           this.push(text, { kind: 'answer', question_id: q.question_id, about_id: q.about_id, session: q.session, question: q.question.slice(0, 300), original: original?.slice(0, 4000) });
           return this.send(res, 202, { ok: true });
@@ -353,7 +394,10 @@ export class Channel {
           const utterance_id = str(b.utterance_id, 80);
           if (!this.mcp.initialized) return this.send(res, 503, { error: 'boss offline' });
           const r = [...s.routes].reverse().find((x) => x.utterance_id === utterance_id && x.sent_at);
-          if (r && s.now() - (r.sent_at ?? 0) <= UNDO_WINDOW_MS) s.countMiss(r.target, !r.explicit);
+          if (r && s.now() - (r.sent_at ?? 0) <= UNDO_WINDOW_MS) {
+            s.countMiss(r.target, !r.explicit);
+            s.bump(r.explicit ? 'route_explicit' : 'route_inferred', 'undone');
+          }
           this.push(`scratch that (undo utterance ${utterance_id})`, { kind: 'undo', utterance_id, session: r?.target });
           return this.send(res, 202, { ok: true, target: r?.target ?? null });
         }
@@ -364,6 +408,7 @@ export class Channel {
           if (!resolve) return this.send(res, 404, { error: 'no pending route (window already closed?)' });
           const r = s.routes.find((x) => x.route_id === route_id);
           if (r) s.countMiss(r.target, false);
+          s.bump('route_inferred', 'cancelled');
           resolve('cancelled');
           return this.send(res, 200, { ok: true });
         }

@@ -35,6 +35,41 @@ public struct SessionsStore: Sendable {
     public var dir: URL
     public var isAlive: @Sendable (Int32) -> Bool
     public var ttyLookup: @Sendable (Int32) -> String?
+    /// Names never shown or routed to (Boss itself, under any name).
+    public var hidden: Set<String> = ["boss"]
+    /// When set, only names matching one of these globs are shown (demos and tests).
+    public var only: [String]? = nil
+
+    /// Builds a store from BOSS_NAME (hidden too) and BOSS_SESSIONS_ONLY ("payments,site" or "bt-*").
+    public static func fromEnvironment(_ env: [String: String] = ProcessInfo.processInfo.environment) -> SessionsStore {
+        var s = SessionsStore()
+        if let n = env["BOSS_NAME"], !n.isEmpty { s.hidden.insert(n.lowercased()) }
+        if let o = env["BOSS_SESSIONS_ONLY"], !o.isEmpty {
+            s.only = o.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        }
+        return s
+    }
+
+    public static func glob(_ pattern: String, _ name: String) -> Bool {
+        let parts = pattern.lowercased().split(separator: "*", omittingEmptySubsequences: false).map(String.init)
+        let n = name.lowercased()
+        if parts.count == 1 { return n == parts[0] }
+        guard n.hasPrefix(parts[0]) else { return false }
+        var rest = n.dropFirst(parts[0].count)
+        for (i, p) in parts.dropFirst().enumerated() {
+            let last = i == parts.count - 2
+            if last { return p.isEmpty || rest.hasSuffix(p) }
+            guard let r = rest.range(of: p) else { return false }
+            rest = rest[r.upperBound...]
+        }
+        return true
+    }
+
+    public func visible(_ name: String) -> Bool {
+        if hidden.contains(name.lowercased()) { return false }
+        if let only { return only.contains { SessionsStore.glob($0, name) } }
+        return true
+    }
 
     public init(dir: URL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/sessions"),
                 isAlive: @escaping @Sendable (Int32) -> Bool = SessionsStore.pidAlive,
@@ -73,7 +108,7 @@ public struct SessionsStore: Sendable {
         for f in files where f.hasSuffix(".json") {
             guard let d = try? Data(contentsOf: dir.appendingPathComponent(f)),
                   let s = SessionInfo.parse(d) else { continue }
-            guard s.kind == "interactive", s.name.lowercased() != "boss", isAlive(s.pid) else { continue }
+            guard s.kind == "interactive", visible(s.name), isAlive(s.pid) else { continue }
             out.append(s)
         }
         return out.sorted { $0.name < $1.name }

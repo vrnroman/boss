@@ -65,8 +65,10 @@ cp "$REPO/tts/kokoro_server.py" "$BOSS_HOME/tts/kokoro_server.py"
 rm -rf "$BOSS_HOME/app/channel"
 mkdir -p "$BOSS_HOME/app/channel"
 cp -R "$REPO/channel/src" "$REPO/channel/package.json" "$BOSS_HOME/app/channel/"
-cp "$REPO/bin/boss-up.mjs" "$REPO/bin/bw" "$BOSS_HOME/bin/"
-chmod +x "$BOSS_HOME/bin/boss-up.mjs" "$BOSS_HOME/bin/bw"
+cp "$REPO/bin/boss-up.mjs" "$REPO/bin/boss-radio.mjs" "$REPO/bin/bw" "$BOSS_HOME/bin/"
+chmod +x "$BOSS_HOME/bin/boss-up.mjs" "$BOSS_HOME/bin/boss-radio.mjs" "$BOSS_HOME/bin/bw"
+mkdir -p "$BOSS_HOME/app/sounds"
+cp "$REPO"/sounds/*.wav "$BOSS_HOME/app/sounds/"
 
 # Boss session home.
 mkdir -p "$BOSS_HOME/boss/.claude"
@@ -142,8 +144,14 @@ keep" true
   for l in com.roman.boss.whisper com.roman.boss.tts com.roman.boss.up com.roman.boss.app; do
     [ -f "$LAUNCH_DIR/$l.plist" ] || continue
     launchctl bootout "gui/$(id -u)/$l" 2>/dev/null || true
-    launchctl bootstrap "gui/$(id -u)" "$LAUNCH_DIR/$l.plist"
+    # bootout is asynchronous: wait until the old job is really gone before loading the new one.
+    i=0; while launchctl print "gui/$(id -u)/$l" >/dev/null 2>&1 && [ $i -lt 50 ]; do sleep 0.2; i=$((i+1)); done
+    launchctl bootstrap "gui/$(id -u)" "$LAUNCH_DIR/$l.plist" || { sleep 1; launchctl bootstrap "gui/$(id -u)" "$LAUNCH_DIR/$l.plist"; }
   done
   say "launch agents loaded (whisper, tts, boss supervisor, app)"
+  # A redeploy must run the new channel and prompt: restart the Boss pane (the supervisor keeps it up).
+  if [ -z "${BOSS_NO_RESTART:-}" ]; then
+    BOSS_HOME="$BOSS_HOME" "$NODE" "$BOSS_HOME/bin/boss-up.mjs" restart >/dev/null 2>&1 && say "Boss session restarted on the new code" || say "Boss session will be started by the supervisor"
+  fi
 fi
 say "done"

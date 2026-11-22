@@ -42,7 +42,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let token: @Sendable () -> String? = { paths.readToken() }
         speech = SpeechOut(settings: settings)
         let channel = ChannelClient(token: token)
-        let store = SessionsStore()
+        let store = SessionsStore.fromEnvironment()
         let telegram = TelegramFallback(away: AwayDetector(idleSeconds: {
             CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: CGEventType(rawValue: ~0)!)
         }), runner: TelegramFallback.shellRunner())

@@ -25,6 +25,22 @@ struct SessionsTests {
         #expect(p.cwdBase == "payments")
     }
 
+    @Test func filtersHideBossUnderItsTestNameAndHonourOnly() {
+        let s = SessionsStore.fromEnvironment(["BOSS_NAME": "bt-boss", "BOSS_SESSIONS_ONLY": "bt-*, payments"])
+        #expect(!s.visible("boss"))
+        #expect(!s.visible("bt-boss"))
+        #expect(s.visible("bt-alpha"))
+        #expect(s.visible("payments"))
+        #expect(!s.visible("reelshow-9d"))
+        #expect(!s.visible("xbt-alpha"))
+        let all = SessionsStore.fromEnvironment([:])
+        #expect(all.visible("reelshow-9d"))
+        #expect(!all.visible("Boss"))
+        #expect(SessionsStore.glob("*-docs", "beta-docs"))
+        #expect(SessionsStore.glob("a*c*e", "abcde"))
+        #expect(!SessionsStore.glob("a*c*e", "abcdf"))
+    }
+
     @Test func pidAliveForSelfAndNotForBogus() {
         #expect(SessionsStore.pidAlive(getpid()))
         #expect(!SessionsStore.pidAlive(999_999))

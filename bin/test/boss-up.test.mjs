@@ -77,3 +77,11 @@ test('launch command pins the name, model, channel and project-only settings', (
   assert.match(c, /--dangerously-load-development-channels server:boss-channel/);
   assert.doesNotMatch(c, /dangerously-skip-permissions/);
 });
+
+test('a non-default BOSS_HOME never uses the real "boss" tmux socket', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const out = execFileSync(process.execPath, [new URL('../boss-up.mjs', import.meta.url).pathname, 'status'], { env: { ...process.env, BOSS_HOME: '/tmp/some-sandbox', BOSS_PORT: '1' }, encoding: 'utf8' });
+  const st = JSON.parse(out);
+  assert.match(st.socket, /^boss-[0-9a-f]{8}$/);
+  assert.equal(st.tmux, false);
+});

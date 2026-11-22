@@ -89,7 +89,7 @@ before(async () => {
   const { openSync } = await import('node:fs');
   const logFd = openSync(join(RESULTS, 'app-stderr.log'), 'w');
   appProc = spawn(join(APP, 'Contents', 'MacOS', 'Boss'), [], {
-    env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_PANEL_EXPANDED: '1' },
+    env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_PANEL_EXPANDED: '1', BOSS_NAME, BOSS_SESSIONS_ONLY: 'bt-*' },
     stdio: ['ignore', logFd, logFd],
   });
   appProc.on('exit', (code, signal) => { appExit = { code, signal, at: new Date().toISOString() }; console.log(`  !! Boss.app exited: code=${code} signal=${signal}`); });
@@ -112,6 +112,8 @@ test('the timing tower lists the live worker sessions (and not Boss itself)', as
   const s = (await app('GET', '/sessions')).json.sessions;
   const names = s.map((r) => r.name);
   assert.ok(names.includes('bt-alpha') && names.includes('bt-beta'), names.join(','));
+  assert.ok(!names.includes(BOSS_NAME), 'Boss itself is not a row');
+  assert.ok(names.every((n) => n.startsWith('bt-')), `only test sessions: ${names.join(',')}`);
   const st = (await app('GET', '/status')).json;
   assert.equal(st.boss_connected, true);
   assert.equal(st.recording, false);

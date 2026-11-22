@@ -12,14 +12,18 @@
 // Startup screens (trust folder, new MCP server, development-channels warning) are answered by
 // reading the pane and picking the safe option by its text; an unknown screen is reported, never guessed.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
 export const env = process.env;
 const HOME = env.BOSS_HOME ?? join(homedir(), 'Boss');
 const PORT = Number(env.BOSS_PORT ?? 8788);
-const SOCK = env.BOSS_TMUX_SOCKET ?? 'boss';
+// A non-default home (tests, sandboxes) gets its own tmux socket, so it can never stop the real Boss.
+const DEFAULT_HOME = join(homedir(), 'Boss');
+const SOCK = env.BOSS_TMUX_SOCKET ?? (HOME === DEFAULT_HOME ? 'boss' : `boss-${createHash('sha1').update(HOME).digest('hex').slice(0, 8)}`);
 const SESS = env.BOSS_TMUX_SESSION ?? 'boss';
 const NAME = env.BOSS_NAME ?? 'boss';
 const MODEL = env.BOSS_MODEL ?? 'haiku';
@@ -163,7 +167,7 @@ export function stop(reason = 'requested') {
 }
 
 export async function status() {
-  return { tmux: hasSession(), channel: await health(), session: SESS, socket: SOCK };
+  return { tmux: hasSession(), channel: await health(), session: SESS, socket: SOCK, home: HOME };
 }
 
 async function keep() {
@@ -192,7 +196,8 @@ async function keep() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith('boss-up')) {
+const isMain = (() => { try { return realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); } catch { return false; } })();
+if (isMain) {
   const cmd = process.argv[2] ?? 'status';
   const run = {
     start: () => start(),
