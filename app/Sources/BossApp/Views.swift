@@ -124,10 +124,12 @@ struct PillView: View {
             Spacer(minLength: 4)
             if engine.status == .offline {
                 HStack(spacing: 6) {
-                    Chip(text: engine.channelReachable ? "Boss offline" : "Channel down", color: Palette.offline)
+                    Chip(text: "offline", color: Palette.offline)
+                        .help(engine.channelReachable ? "Boss is offline" : "The channel is down")
                     Button(action: actions.restartBoss) {
-                        Label("Restart", systemImage: "arrow.clockwise").labelStyle(.titleAndIcon)
+                        Image(systemName: "arrow.clockwise")
                     }
+                    .help("Restart Boss")
                     .buttonStyle(SmallButtonStyle(tint: Palette.offline))
                 }
             }
@@ -141,7 +143,7 @@ struct PillView: View {
             .buttonStyle(.plain)
             .help(engine.panelExpanded ? "Collapse" : "Expand")
         }
-        .padding(.horizontal, 14)
+        .padding(.horizontal, 10)
         .frame(height: 56)
         .contentShape(Rectangle())
     }
@@ -198,16 +200,16 @@ struct ExpandedView: View {
     let actions: PanelActions
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             ControlsRow(engine: engine)
             SectionHeader(title: "Sessions", trailing: engine.tower.isEmpty ? nil : "\(engine.tower.count)")
             TowerView(engine: engine)
             SectionHeader(title: "Feed", trailing: nil)
             FeedView(engine: engine, actions: actions)
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 12)
-        .padding(.bottom, 10)
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
     }
 }
 
@@ -229,18 +231,18 @@ struct ControlsRow: View {
     @State private var pressing = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             // Press-and-hold Talk
             HStack(spacing: 8) {
                 Image(systemName: pressing ? "waveform" : "mic.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .symbolEffect(.variableColor.iterative, isActive: pressing)
-                Text(pressing ? "Release to send" : "Hold to talk")
-                    .font(.system(size: 13, weight: .semibold))
+                Text(pressing ? "Release" : "Hold to talk")
+                    .font(.system(size: 12, weight: .semibold))
             }
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity)
-            .frame(height: 38)
+            .frame(height: 30)
             .background(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
                     .fill(pressing ? Palette.listening : Color.white.opacity(0.10))
@@ -279,7 +281,7 @@ struct LanguageToggle: View {
                     Text(code.uppercased())
                         .font(.system(size: 11, weight: .bold))
                         .foregroundStyle(engine.language == code ? .black : .white.opacity(0.7))
-                        .frame(width: 30, height: 38)
+                        .frame(width: 24, height: 30)
                         .background(engine.language == code ? Color.white.opacity(0.85) : Color.clear)
                 }
                 .buttonStyle(.plain)
@@ -302,7 +304,7 @@ struct IconButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(active ? Palette.waiting : .white.opacity(0.85))
-                .frame(width: 38, height: 38)
+                .frame(width: 30, height: 30)
                 .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(hover ? 0.14 : 0.08)))
         }
         .buttonStyle(.plain)
@@ -339,7 +341,7 @@ struct TowerView: View {
         }
         .padding(4)
         }
-        .frame(maxHeight: min(CGFloat(max(engine.tower.count, 1)) * 34 + 8, 214))
+        .frame(maxHeight: min(CGFloat(max(engine.tower.count, 1)) * 30 + 8, 196))
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.card))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Palette.cardStroke))
     }
@@ -367,6 +369,7 @@ struct TowerRowView: View {
                 HStack(spacing: 6) {
                     Text(row.nickname ?? row.name).font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(row.group == .idle ? .white.opacity(0.55) : .white.opacity(0.95))
+                        .lineLimit(1).truncationMode(.middle).layoutPriority(1)
                     if row.nickname != nil {
                         Text(row.name).font(.system(size: 10)).foregroundStyle(Palette.tertiary).lineLimit(1)
                     } else if row.cwdBase != row.name {
@@ -448,11 +451,11 @@ struct CardView: View {
             header
             content
         }
-        .padding(10)
+        .padding(7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Palette.card))
         .overlay(alignment: .leading) {
-            RoundedRectangle(cornerRadius: 1.5).fill(accent.opacity(0.9)).frame(width: 3).padding(.vertical, 10)
+            RoundedRectangle(cornerRadius: 1.5).fill(accent.opacity(0.9)).frame(width: 3).padding(.vertical, 7)
         }
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(card.kind == .question && card.answered != true ? Palette.waiting.opacity(0.45) : Palette.cardStroke))
     }

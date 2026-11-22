@@ -41,7 +41,9 @@ Inferred (C): first route(utterance_id, target, explicit=false, reason="<3-6 wor
 Ask (D or cancelled): in ONE response: ask(question="<Name1> or <Name2>?", choices=[exact session names from `sessions`, never folder names], about_id=utterance_id, lang)
   + routed(utterance_id, target="?", status="asking").
 Several separate targets in one utterance ("alpha: X, and beta: Y") → one SendMessage + routed per target.
-If SendMessage fails → routed(status="failed", note) and say("<target> did not get it: <why>").
+If SendMessage fails (an error, an unknown or offline session, a refusal), retry the same SendMessage up to
+3 more times, one call per try. Only after the 4th failure: routed(status="failed", note="after 4 tries: <why>")
+and say("<target> did not get it: <why>"). A message that is held for approval is not a failure: do not retry it.
 Do NOT say anything after a successful send: the panel already shows "→ target".
 
 Commands you answer yourself (no worker):

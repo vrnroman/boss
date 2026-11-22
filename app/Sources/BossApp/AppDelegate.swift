@@ -34,8 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var lastStatus: AppStatus?
     var wasRecording = false
 
-    static let pillSize = NSSize(width: 360, height: 56)
-    static let expandedSize = NSSize(width: 380, height: 640)
+    static let pillSize = NSSize(width: 300, height: 48)
+    static let expandedSize = NSSize(width: 300, height: 480)
 
     func applicationDidFinishLaunching(_ note: Notification) {
         retireOlderInstances()
