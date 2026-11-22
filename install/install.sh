@@ -73,7 +73,7 @@ cp "$REPO"/sounds/*.wav "$BOSS_HOME/app/sounds/"
 # Boss session home.
 mkdir -p "$BOSS_HOME/boss/.claude"
 cp "$REPO/boss-home/BOSS_PROMPT.md" "$BOSS_HOME/boss/BOSS_PROMPT.md"
-cp "$REPO/boss-home/.claude/settings.json" "$BOSS_HOME/boss/.claude/settings.json"
+cp "$REPO/boss-home/.claude/settings.json" "$REPO/boss-home/.claude/guard-send.mjs" "$BOSS_HOME/boss/.claude/"
 sed -e "s#__NODE__#$NODE#" -e "s#__BOSS_CHANNEL__#$BOSS_HOME/app/channel/src/server.ts#" "$REPO/boss-home/.mcp.json" > "$BOSS_HOME/boss/.mcp.json"
 
 # ---------- Claude Code config (reversible, backed up) ----------

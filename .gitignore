@@ -6,3 +6,4 @@ build/
 e2e/results/*.wav
 .DS_Store
 .backself/demo/out/
+e2e/results/

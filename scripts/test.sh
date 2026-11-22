@@ -12,7 +12,7 @@ step "channel: unit + integration (node:test)"
 step "channel: typecheck (tsc --noEmit)"
 (cd channel && npx --no-install tsc -p .)
 step "supervisor + installer config edits (node:test)"
-node --test --test-reporter=dot bin/test/*.test.mjs install/test/*.test.mjs
+node --test --test-reporter=dot bin/test/*.test.mjs install/test/*.test.mjs boss-home/test/*.test.mjs
 step "tts sidecar gate (unittest)"
 (cd tts && python3 -m unittest -q test_server.py)
 step "app: BossCore (Swift Testing)"

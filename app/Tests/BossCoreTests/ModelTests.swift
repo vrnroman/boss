@@ -350,3 +350,17 @@ struct TelegramTests {
         #expect(sent.value.isEmpty)
     }
 }
+
+@Suite("Telegram only from the real install")
+struct TelegramGuardTests {
+    let home = "/Users/r/Boss"
+    @Test func realInstallMaySend() {
+        #expect(TelegramFallback.allowed(env: [:], defaultHome: home))
+        #expect(TelegramFallback.allowed(env: ["BOSS_HOME": "/Users/r/Boss/"], defaultHome: home))
+    }
+    @Test func testsDemosAndSandboxesNeverSend() {
+        #expect(!TelegramFallback.allowed(env: ["BOSS_DEBUG_CONTROL": "1"], defaultHome: home))
+        #expect(!TelegramFallback.allowed(env: ["BOSS_NO_TELEGRAM": "1"], defaultHome: home))
+        #expect(!TelegramFallback.allowed(env: ["BOSS_HOME": "/var/folders/x/boss-app-e2e-1/home"], defaultHome: home))
+    }
+}

@@ -61,7 +61,7 @@ before(async () => {
   assert.equal(bossUp('start'), 0);
   mkdirSync(RESULTS, { recursive: true });
   const log = openSync(join(RESULTS, 'mic-app.log'), 'w');
-  appProc = spawn(APP, [], { env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_PANEL_EXPANDED: '1', BOSS_NAME, BOSS_SESSIONS_ONLY: 'bt-*' }, stdio: ['ignore', log, log] });
+  appProc = spawn(APP, [], { env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_NO_TELEGRAM: '1', BOSS_PANEL_EXPANDED: '1', BOSS_NAME, BOSS_SESSIONS_ONLY: 'bt-*' }, stdio: ['ignore', log, log] });
   const st = await poll(async () => { const s = (await app('GET', '/status')).json; return s?.boss_connected && s.sessions >= 2 ? s : null; }, 30_000, 'app ready');
   micOK = st.mic_permission === 'granted';
   // The Mac mini's own speakers play the speech into the room for the webcam mic: raise the
