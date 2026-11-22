@@ -11,6 +11,7 @@ public protocol DebugControlHandler: AnyObject {
     func debugUndo() async -> HTTPResponse
     func debugSpoken() -> HTTPResponse
     func debugStatus() -> HTTPResponse
+    func debugSnapshot(path: String) -> HTTPResponse
 }
 
 /// Routes debug-control HTTP requests. Token-guarded; browser requests (Origin) refused.
@@ -56,7 +57,10 @@ public struct DebugControlRouter {
             else { return .error(400, "choice required") }
             return await h.debugTap(choice: choice)
         case ("POST", "/undo"): return await h.debugUndo()
-        case (_, "/status"), (_, "/feed"), (_, "/sessions"), (_, "/spoken"), (_, "/inject"), (_, "/talk"), (_, "/tap"), (_, "/undo"):
+        case ("POST", "/snapshot"):
+            guard let j = r.json(), let p = j["path"] as? String, p.hasSuffix(".png") else { return .error(400, "path (.png) required") }
+            return h.debugSnapshot(path: p)
+        case (_, "/status"), (_, "/feed"), (_, "/sessions"), (_, "/spoken"), (_, "/inject"), (_, "/talk"), (_, "/tap"), (_, "/undo"), (_, "/snapshot"):
             return .error(405, "method not allowed")
         default:
             return .error(404, "not found")

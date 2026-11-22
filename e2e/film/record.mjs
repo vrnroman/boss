@@ -47,16 +47,22 @@ function windowId(owner, pred) {
 }
 
 const capturing = { on: true };
-async function captureLoop(wid, dir, fps = 4) {
-  let n = 0;
+/** Panel: the app renders its real view to PNG (works with the display asleep). */
+async function panelLoop(dir, fps = 4) {
   while (capturing.on) {
     const t = now();
-    spawnSync('screencapture', ['-x', '-o', '-l', String(wid), join(dir, `${String(t).padStart(7, '0')}.png`)]);
-    n++;
-    const wait = Math.max(0, 1000 / fps - (now() - t));
-    await sleep(wait);
+    await app('POST', '/snapshot', { path: join(dir, `${String(t).padStart(7, '0')}.png`) }).catch(() => {});
+    await sleep(Math.max(0, 1000 / fps - (now() - t)));
   }
-  return n;
+}
+/** Workers: the real tmux panes, with colours, as text; compose.mjs renders them as a terminal. */
+async function termLoop(dir, fps = 2) {
+  while (capturing.on) {
+    const t = now();
+    const panes = ['payments', 'site'].map((n) => spawnSync('tmux', ['-L', SOCK, 'capture-pane', '-e', '-p', '-t', n], { encoding: 'utf8' }).stdout);
+    writeFileSync(join(dir, `${String(t).padStart(7, '0')}.json`), JSON.stringify(panes));
+    await sleep(Math.max(0, 1000 / fps - (now() - t)));
+  }
 }
 
 // ---------- app control ----------
@@ -104,9 +110,7 @@ async function say(text, voice = 'Samantha') {
   const dur = Number(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', wav], { encoding: 'utf8' }));
   // The "speaking" happens before the release: the clip plays, then the release sends it.
   const t = now();
-  await app('POST', '/talk', { down: true }).catch(() => {}); // shows the recording state if a mic exists; harmless without
-  await sleep(dur * 1000);
-  await app('POST', '/talk', { down: false }).catch(() => {});
+  await sleep(dur * 1000); // the words are being said (the clip plays here in the film)
   const r = (await app('POST', '/inject', { wav_path: wav })).json;
   timeline.injects.push({ t, release: now(), wav, text, voice, dur, result: r });
   mark(`said: ${text} -> ${r?.text}`);
@@ -127,6 +131,9 @@ async function main() {
   await Promise.all([startWorker('payments', W.payments, { bossName: BOSS }), startWorker('site', W.site, { bossName: BOSS })]);
   const env = { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_TMUX_SOCKET: SOCK, BOSS_TMUX_SESSION: BOSS, BOSS_NAME: BOSS, BOSS_ALLOW: 'payments,site', BOSS_RADIO_DRY: '1' };
   // The worker block names the boss; lib.mjs primed workers for "bt-boss", so re-prime for this film's name.
+  // Readable on screen: 100 columns, 30 rows (Claude Code reflows to the new size).
+  for (const n of ['payments', 'site']) spawnSync('tmux', ['-L', SOCK, 'resize-window', '-t', n, '-x', '100', '-y', '30']);
+  await sleep(4000); // let Claude Code redraw at the new size before anything is filmed
   bossEnv = env;
   const up = spawnSync(process.execPath, [join(REPO, 'bin', 'boss-up.mjs'), 'start'], { env, encoding: 'utf8' });
   if (up.status !== 0) throw new Error(`boss-up: ${up.stdout} ${up.stderr}`);
@@ -134,23 +141,7 @@ async function main() {
   const appProc = appProcRef = spawn(APP, [], { env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_NO_TELEGRAM: '1', BOSS_PANEL_EXPANDED: '1', BOSS_NAME: BOSS, BOSS_SESSIONS_ONLY: 'payments,site', BOSS_NO_MIC: '1' }, stdio: ['ignore', log, log] });
   await poll(async () => { const s = (await app('GET', '/status')).json; return s?.boss_connected && s.sessions >= 2; }, 30_000, 'app ready');
 
-  // A real iTerm window on the two workers, split top/bottom.
-  itermWindow = execFileSync('osascript', ['-e', `tell application "iTerm2"
-    set w to (create window with default profile command "/opt/homebrew/bin/tmux -L ${SOCK} attach -t payments")
-    tell w to set bounds to {60, 60, 1260, 1060}
-    tell current session of w
-      set name to "payments"
-      set s2 to (split horizontally with default profile command "/opt/homebrew/bin/tmux -L ${SOCK} attach -t site")
-    end tell
-    tell s2 to set name to "site"
-    return id of w
-  end tell`], { encoding: 'utf8' }).trim();
-  await sleep(2500);
-  const panelId = windowId('Boss', (w) => w[1] === '3');
-  const termId = windowId('iTerm', (w) => w[1] === '0' && Number(w[2]) >= 1100 && Number(w[2]) <= 1300);
-  if (!panelId || !termId) throw new Error(`windows not found: panel ${panelId} term ${termId}`);
-  mark(`windows panel=${panelId} term=${termId}`);
-  const loops = [captureLoop(panelId, join(OUT, 'panel')), captureLoop(termId, join(OUT, 'term'))];
+  const loops = [panelLoop(join(OUT, 'panel')), termLoop(join(OUT, 'term'))];
   await sleep(3000);
 
   let end;
@@ -226,7 +217,7 @@ async function main() {
   mark('done');
   appProc.kill();
   spawnSync(process.execPath, [join(REPO, 'bin', 'boss-up.mjs'), 'stop'], { env });
-  closeTerm();
+  spawnSync('tmux', ['-L', SOCK, 'kill-server']);
 }
 
 main().catch((e) => { console.error(e); capturing.on = false; closeTerm(); appProcRef?.kill(); if (bossEnv) spawnSync(process.execPath, [join(REPO, 'bin', 'boss-up.mjs'), 'stop'], { env: bossEnv }); spawnSync('tmux', ['-L', SOCK, 'kill-server']); writeFileSync(join(OUT, 'timeline.json'), JSON.stringify(timeline, null, 2)); process.exit(1); });

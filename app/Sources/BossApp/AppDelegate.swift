@@ -304,6 +304,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let env = ProcessInfo.processInfo.environment
         guard env["BOSS_DEBUG_CONTROL"] == "1" || settings.debugControl else { return }
         engine.allowSilentAnswerWindow = true
+        engine.snapshotter = { [weak self] path in
+            guard let view = self?.panel.contentView else { return false }
+            view.layoutSubtreeIfNeeded()
+            guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
+            view.cacheDisplay(in: view.bounds, to: rep)
+            guard let png = rep.representation(using: .png, properties: [:]) else { return false }
+            return (try? png.write(to: URL(fileURLWithPath: path))) != nil
+        }
         let server = DebugServer(router: DebugControlRouter(token: token, handler: engine))
         do { try server.start() } catch { NSLog("Boss: debug control could not start: \(error)") }
         debugServer = server
