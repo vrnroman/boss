@@ -536,6 +536,7 @@ struct CardView: View {
         case "grantInputMonitoring": return "Open Input Monitoring"
         case "grantMicrophone": return "Open Microphone settings"
         case "restartBoss": return "Restart Boss"
+        case "relaunchApp": return "Restart Boss.app"
         default: return a
         }
     }
