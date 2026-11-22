@@ -225,8 +225,14 @@ public final class BossEngine {
     }
 
     func send(_ finished: (Recording, [Int16])?) async -> String? {
-        guard let (r, samples) = finished else { return nil }
-        let verdict = deps.gate.evaluate(samples: samples)
+        guard let (r, captured) = finished else { return nil }
+        // An answer window starts right after Boss spoke: its pre-roll holds the tail of Boss's own
+        // voice (an echo heard as speech in a real run), so it is dropped.
+        let samples = r.source == .answerWindow ? Array(captured.dropFirst(PreRollBuffer.defaultSamples)) : captured
+        let verdict = r.source == .answerWindow ? deps.gate.evaluateUnprompted(samples: samples) : deps.gate.evaluate(samples: samples)
+        if r.source == .answerWindow {
+            NSLog("Boss: answer window %.1f s, voiced %d ms, verdict %@", Double(samples.count) / 16_000, deps.gate.voicedMs(samples: samples), String(describing: verdict))
+        }
         guard verdict == .ok else {
             if r.source != .answerWindow {
                 feed.addSystem(verdict == .tooShort ? "Too short, nothing sent." : "Didn't hear anything, nothing sent.",
@@ -235,7 +241,7 @@ public final class BossEngine {
             return nil
         }
         let id = OutboxID.make(now: deps.clock())
-        await process(id: id, wav: WAV.encode(samples: samples), mode: r.questionID != nil ? "answer" : "talk", questionID: r.questionID)
+        await process(id: id, wav: WAV.encode(samples: AutoGain.apply(samples)), mode: r.questionID != nil ? "answer" : "talk", questionID: r.questionID)
         return id
     }
 
@@ -263,8 +269,15 @@ public final class BossEngine {
     /// Fed by the app's level meter timer.
     public func updateLevel(_ l: Double) {
         level = l
-        if recording != nil && l > 0.35 { lastVoiceAt = deps.clock() }
+        guard recording != nil else { roomLevel = nil; return }
+        // Voice = clearly above this room's own noise, not above a fixed level: a fan or a hum kept
+        // a real answer window open for 15 s. The floor follows quiet fast and loud slowly.
+        let floor = roomLevel ?? l
+        roomLevel = l < floor ? l : floor + (l - floor) * 0.01
+        if l > 0.2 && l > floor + 0.15 { lastVoiceAt = deps.clock() }
     }
+    /// Running room-noise level (meter units) during the current recording.
+    private var roomLevel: Double?
 
     // MARK: - Pipeline: outbox → transcribe → channel
 
@@ -301,7 +314,12 @@ public final class BossEngine {
             let prompt = VocabularyPrompt.build(sessionNames: sessions.map(\.name), words: deps.settings.userWords)
             do {
                 let t = try await deps.transcriber.transcribe(wav: wav, prompt: prompt, language: deps.settings.whisperLanguage)
-                guard let clean = HallucinationFilter.clean(t.text) else {
+                // Roman speaks English or Russian. Text with no Latin or Cyrillic letters is noise whisper
+                // turned into words (room noise became Japanese in a real run); an answer-window recording,
+                // which nobody chose to start, must also be detected as English or Russian.
+                let noScript = LanguageCode.guess(t.text) == nil
+                let unpromptedOther = item.mode == "answer" && deps.settings.whisperLanguage == nil && !(t.lang == "en" || t.lang == "ru")
+                guard !noScript, !unpromptedOther, let clean = HallucinationFilter.clean(t.text) else {
                     item = (try? deps.outbox.update(id) { $0.state = .failed; $0.final = true; $0.error = "filtered"; $0.text = t.text }) ?? item
                     feed.setTranscript(utteranceID: id, text: t.text.isEmpty ? "(nothing heard)" : t.text, lang: t.lang)
                     feed.setStatus(utteranceID: id, "dropped", note: "nothing to send")
@@ -460,6 +478,8 @@ public final class BossEngine {
             speech.finishCurrent()
             speaking = false
             if let q = item.questionID, feed.card("q-\(q)")?.answered != true {
+                try? await Task.sleep(nanoseconds: 350_000_000)   // let the room go quiet after Boss speaks
+                guard feed.card("q-\(q)")?.answered != true else { return }
                 openAnswerWindow(questionID: q)
             }
             pumpSpeech()

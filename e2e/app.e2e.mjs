@@ -89,7 +89,7 @@ before(async () => {
   const { openSync } = await import('node:fs');
   const logFd = openSync(join(RESULTS, 'app-stderr.log'), 'w');
   appProc = spawn(join(APP, 'Contents', 'MacOS', 'Boss'), [], {
-    env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_PANEL_EXPANDED: '1', BOSS_NAME, BOSS_SESSIONS_ONLY: 'bt-*' },
+    env: { ...process.env, BOSS_HOME: home.dir, BOSS_PORT: String(PORT), BOSS_DEBUG_CONTROL: '1', BOSS_PANEL_EXPANDED: '1', BOSS_NAME, BOSS_SESSIONS_ONLY: 'bt-*', BOSS_NO_MIC: '1' },
     stdio: ['ignore', logFd, logFd],
   });
   appProc.on('exit', (code, signal) => { appExit = { code, signal, at: new Date().toISOString() }; console.log(`  !! Boss.app exited: code=${code} signal=${signal}`); });

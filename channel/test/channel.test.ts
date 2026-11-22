@@ -486,3 +486,19 @@ describe('radio', () => {
     await h.stop();
   });
 });
+
+describe('routing question choices', () => {
+  test('folder names in a routing question are mapped to the live session names; worker questions are left alone', async () => {
+    const h = await new Harness().start({ BOSS_ALLOW: 'bt-*' });
+    await h.connect();
+    await h.post('/utterance', { id: 'cq1', text: 'read me the readme', sessions: [
+      { name: 'bt-alpha', cwd: '/w/alpha-calc', status: 'idle' }, { name: 'bt-beta', cwd: '/w/beta-docs', status: 'idle' }] });
+    const s = h.sse(); await s.ready;
+    await h.call('ask', { question: 'Which README: alpha-calc or beta-docs?', choices: ['alpha-calc', 'beta-docs'], about_id: 'cq1' });
+    assert.deepEqual((await s.until((e) => e.event === 'ask')).data.choices, ['bt-alpha', 'bt-beta']);
+    await h.call('ask', { question: 'blue or green?', choices: ['blue', 'green'], session: 'bt-beta' });
+    assert.deepEqual((await s.until((e) => e.event === 'ask' && e.data.session === 'bt-beta')).data.choices, ['blue', 'green']);
+    s.close();
+    await h.stop();
+  });
+});

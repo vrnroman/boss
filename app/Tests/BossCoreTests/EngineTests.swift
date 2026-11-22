@@ -33,6 +33,48 @@ struct EngineTests {
         #expect(rig.engine.feed.card("q-q1")?.answered == false)
     }
 
+    @Test func roomNoiseInTheAnswerWindowSendsNothing() async {
+        // Real run: a fan through the Brio, level above the floor but no speech, became "Japanese".
+        let rig = Rig()
+        rig.recorder.samples = TestAudio.roomNoise(16000 * 6)
+        rig.transcriber.text.value = "ゼリーのレンジで作りましょう。"
+        rig.engine.handle(ask())
+        #expect(await eventually { rig.recorder.stops == 1 })
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(rig.transcriber.calls.value == 0, "noise never reaches whisper")
+        #expect(rig.channel.calls.value.isEmpty)
+    }
+
+    @Test func nonLatinNonCyrillicTranscriptIsDroppedEvenFromHoldToTalk() async {
+        let rig = Rig()
+        rig.transcriber.text.value = "ゼリーのレンジで作りましょう。"
+        rig.transcriber.lang.value = nil
+        _ = rig.engine.beginTalk(source: .button)
+        _ = await rig.engine.endTalk()
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(!rig.channel.paths.contains("/utterance"))
+    }
+
+    @Test func answerWindowSpeechDetectedAsOtherLanguageIsDropped() async {
+        let rig = Rig()
+        rig.transcriber.text.value = "Ja, genau"
+        rig.transcriber.lang.value = "de"
+        rig.engine.handle(ask())
+        #expect(await eventually { rig.recorder.stops == 1 })
+        try? await Task.sleep(nanoseconds: 50_000_000)
+        #expect(!rig.channel.paths.contains("/answer"))
+    }
+
+    @Test func holdToTalkKeepsAMislabelledLatinTranscript() async {
+        // Prompted speech is never thrown away for a language label: "never lose a word".
+        let rig = Rig()
+        rig.transcriber.text.value = "payments run the tests"
+        rig.transcriber.lang.value = "de"
+        _ = rig.engine.beginTalk(source: .button)
+        _ = await rig.engine.endTalk()
+        #expect(await eventually { rig.channel.paths.contains("/utterance") })
+    }
+
     @Test func noMicPermissionNoAnswerWindow() async {
         let rig = Rig()
         rig.recorder.permission = "undetermined"

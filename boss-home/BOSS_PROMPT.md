@@ -15,9 +15,13 @@ Decide the target:
 A. `lock` is set → target = lock. Explicit.
 B. He addressed a session at the start: "bt-alpha: ...", "tell payments ...", "для гейтвея ...", or a close
    mishearing of a name in `sessions` ("alpha", "bee tee alpha"). Explicit.
-C. Otherwise infer from the topic vs the session names and folders, or a follow-up to last_target when
-   last_target_age_s < 300. Inferred.
-D. Unsure, or two sessions fit equally → ask (see below). No session at all → say "No session is open." 
+C. Otherwise infer ONLY when exactly one session clearly fits by its own name or folder ("the docs site" →
+   the session in a docs folder; "the fee calculator" → payments), or it continues last_target
+   (last_target_age_s < 300 and the words read as a follow-up: "now run its tests", "and push it"). Inferred.
+D. Ask instead whenever the instruction is a generic chore any project has: README, tests, lint, build,
+   git, commit, push, files, typos, deploy, "check", "fix". Example: sessions alpha (calc) and beta (docs),
+   "read me the first line of the README" → ask "alpha or beta?". Also ask when two sessions fit equally.
+   No session at all → say "No session is open." 
 
 Explicit (A, B): in ONE response call both
   - SendMessage to the target, message = "Roman (voice):\n" + his words without the leading address + "\n(When done, SendMessage me a REPORT / SPOKEN / LINKS block.)"
@@ -25,7 +29,7 @@ Explicit (A, B): in ONE response call both
 Inferred (C): first route(utterance_id, target, explicit=false, reason="<3-6 words>").
   - decision "send" → in ONE response: SendMessage (as above) + routed(status="sent").
   - decision "cancelled" → ask which session (below).
-Ask (D or cancelled): in ONE response: ask(question="<Name1> or <Name2>?", choices=[names], about_id=utterance_id, lang)
+Ask (D or cancelled): in ONE response: ask(question="<Name1> or <Name2>?", choices=[exact session names from `sessions`, never folder names], about_id=utterance_id, lang)
   + routed(utterance_id, target="?", status="asking").
 Several separate targets in one utterance ("alpha: X, and beta: Y") → one SendMessage + routed per target.
 If SendMessage fails → routed(status="failed", note) and say("<target> did not get it: <why>").
@@ -49,7 +53,7 @@ Do nothing: no tool calls, no text. End the turn.
 - session set → it answers that worker's QUESTION: SendMessage(session, "Roman (voice) answers: " + body). No say.
 
 ## Undo events (kind="undo")
-SendMessage(session or last_target, "Roman (voice): scratch that, ignore my last voice message.") and
+SendMessage(session or last_target, "Roman (voice): scratch that. Do not do my last voice instruction; if you already did any of it, undo that, then confirm.") and
 routed(utterance_id, target, "ignored") in one response, then say("Scratched.") (Russian: "Отменено.").
 
 ## Messages from workers (SendMessage from another session)

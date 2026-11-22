@@ -124,3 +124,13 @@ struct HallucinationTests {
         #expect(HallucinationFilter.clean("[BLANK_AUDIO] run   the tests ") == "run the tests")
     }
 }
+
+@Suite("Prompt leakage")
+struct PromptLeakageTests {
+    @Test func trailingEtcFromThePromptIsDroppedOnShortAnswers() {
+        #expect(HallucinationFilter.clean("bt-beta, etc.") == "bt-beta")
+        #expect(HallucinationFilter.clean("gateway etc") == "gateway")
+        let long = "list the files, the tests, the docs, etc."
+        #expect(HallucinationFilter.clean(long) == long)
+    }
+}

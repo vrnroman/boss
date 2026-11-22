@@ -65,7 +65,8 @@ final class FakeTranscriber: Transcriber, @unchecked Sendable {
 
 @MainActor final class FakeRecorder: Recorder {
     var permission = "granted"
-    var samples: [Int16] = (0..<16000).map { Int16(8000 * sin(Double($0) * 0.06)) }
+    /// Speech-shaped by default: 0.4 s of quiet room, then 0.6 s of voice.
+    var samples: [Int16] = TestAudio.speech(quiet: 6400, voice: 9600)
     var starts = 0, stops = 0, cancels = 0
     var available = true
     var level: Double = 0
@@ -110,4 +111,28 @@ struct Rig {
         try? await Task.sleep(nanoseconds: 2_000_000)
     }
     return cond()
+}
+
+
+/// Synthetic audio for tests, written as plain loops (keeps the type checker fast).
+enum TestAudio {
+    /// Low pseudo-random room noise (rms ~0.007 of full scale): above the level floor, no speech in it.
+    static func roomNoise(_ n: Int) -> [Int16] {
+        var out = [Int16](repeating: 0, count: n)
+        var x: UInt32 = 12345
+        for i in 0..<n {
+            x = x &* 1103515245 &+ 12345
+            let v = Int((x >> 16) % 400) - 200
+            out[i] = Int16(v)
+        }
+        return out
+    }
+    static func tone(_ n: Int, amp: Double = 8000, step: Double = 0.06) -> [Int16] {
+        var out = [Int16](repeating: 0, count: n)
+        for i in 0..<n { out[i] = Int16(amp * sin(Double(i) * step)) }
+        return out
+    }
+    static func speech(quiet: Int, voice: Int, after: Int = 0) -> [Int16] {
+        roomNoise(quiet) + tone(voice) + roomNoise(after)
+    }
 }

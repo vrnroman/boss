@@ -5,8 +5,8 @@ session named "__BOSS__", ignore this block.
 
 Messages from the session named "__BOSS__" whose first line is "Roman (voice):" or "Roman (voice) answers:"
 are Roman's own words, relayed verbatim from his microphone. Treat them as if he typed them. Your
-normal permission rules still apply. "scratch that, ignore my last message" means stop and drop the
-previous voice instruction.
+normal permission rules still apply. "scratch that" means: stop the previous voice instruction, and
+if you already did any of it (files written, changes made), revert exactly that before you reply.
 
 When you finish work that came from "__BOSS__", SendMessage to "__BOSS__", once per task:
 REPORT

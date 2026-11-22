@@ -133,6 +133,11 @@ export class Channel {
    */
   routingContext(raw: unknown): Record<string, string | undefined> {
     const list = Array.isArray(raw) ? raw : [];
+    if (list.length) {
+      this.lastSessions = list.map((x) => (typeof x === 'object' && x ? (x as Record<string, unknown>) : {}))
+        .map((x) => ({ name: str(x.name, 60).trim(), cwd: str(x.cwd, 300) }))
+        .filter((x) => x.name && !this.isSelf(x.name) && allowed(this.allow, x.name));
+    }
     const live = list
       .map((x) => (typeof x === 'object' && x ? (x as Record<string, unknown>) : {}))
       .map((x) => ({ name: str(x.name, 60).trim(), cwd: str(x.cwd, 300), status: str(x.status, 20) }))
@@ -149,6 +154,24 @@ export class Channel {
   }
 
   radioRunning = false;
+  /** The live sessions the app sent with the last utterance: [{name, cwd}]. */
+  lastSessions: { name: string; cwd: string }[] = [];
+
+  /** A routing question's choices must be session names: map folder names (a real Haiku slip) to them. */
+  normalizeChoices(choices: string[]): string[] {
+    if (!this.lastSessions.length) return choices;
+    const base = (p: string) => (p.split('/').filter(Boolean).pop() ?? '').toLowerCase();
+    const out: string[] = [];
+    for (const c of choices) {
+      const l = c.toLowerCase();
+      const hit = this.lastSessions.find((x) => x.name.toLowerCase() === l)
+        ?? this.lastSessions.find((x) => base(x.cwd) === l)
+        ?? this.lastSessions.find((x) => base(x.cwd).includes(l) || l.includes(base(x.cwd)));
+      const v = hit ? hit.name : c;
+      if (!out.includes(v)) out.push(v);
+    }
+    return out;
+  }
 
   /** Runs bin/boss-radio.mjs (or BOSS_RADIO_CMD in tests) and reports the outcome as a panel card. */
   startRadio(hours?: number): string {
@@ -218,7 +241,8 @@ export class Channel {
       handler: (a) => {
         const question = str(a.question, 600).trim();
         if (!question) throw new ToolError('question is empty');
-        const choices = Array.isArray(a.choices) ? a.choices.map((c) => str(c, 80).trim()).filter(Boolean).slice(0, 6) : [];
+        let choices = Array.isArray(a.choices) ? a.choices.map((c) => str(c, 80).trim()).filter(Boolean).slice(0, 6) : [];
+        if (a.about_id) choices = this.normalizeChoices(choices);
         const q = s.addQuestion({ question, choices, about_id: str(a.about_id, 80) || undefined, session: str(a.session, 100) || undefined, lang: str(a.lang) || undefined });
         s.bump(q.about_id ? 'routing_question' : 'worker_question', 'asked');
         s.emit('ask', { question_id: q.question_id, question, choices, about_id: q.about_id, session: q.session, lang: q.lang });

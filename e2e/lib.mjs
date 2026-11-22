@@ -62,12 +62,12 @@ export async function answerScreens(name, screens, readyRe, timeoutMs = 60_000) 
 }
 
 /** Starts a throwaway worker session `name` in `folder`, primed with the worker block. */
-export async function startWorker(name, folder, { model = 'haiku' } = {}) {
+export async function startWorker(name, folder, { model = 'haiku', bossName = BOSS_NAME } = {}) {
   mkdirSync(folder, { recursive: true });
   tmux('kill-session', '-t', name);
   const settings = JSON.stringify({ skipDangerousModePermissionPrompt: true, crossSessionInbound: 'accept', autoMemoryEnabled: false });
   const cmd = ['claude', '--name', name, '--model', model, '--effort', 'low', '--dangerously-skip-permissions',
-    '--setting-sources', 'project,local', '--settings', settings, '--append-system-prompt', workerBlock()]
+    '--setting-sources', 'project,local', '--settings', settings, '--append-system-prompt', workerBlock(bossName)]
     .map((a) => `'${a.replace(/'/g, `'\\''`)}'`).join(' ');
   const r = tmux('new-session', '-d', '-s', name, '-x', '200', '-y', '50', '-c', folder, cmd);
   if (r.status !== 0) throw new Error(r.stderr);

@@ -29,6 +29,9 @@ if [ "${1:-}" = "--e2e" ]; then
   step "E2E core (real Boss + real worker sessions)"
   node --test --test-reporter=spec --test-timeout=900000 e2e/core.e2e.mjs
   step "E2E app (real Boss.app + whisper + Boss + workers)"
+  sh app/scripts/build-app.sh >/dev/null
   node --test --test-reporter=spec --test-timeout=900000 e2e/app.e2e.mjs
+  step "E2E real microphone (speakers → mic → app; skips without mic access)"
+  node --test --test-reporter=spec --test-timeout=900000 e2e/mic.e2e.mjs
 fi
 printf '\nALL GREEN\n'

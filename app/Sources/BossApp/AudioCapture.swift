@@ -59,6 +59,8 @@ final class AudioCapture: Recorder {
     var onPermissionGranted: (() -> Void)?
 
     var permission: String {
+        // Tests and demos that inject audio switch the microphone off entirely.
+        if ProcessInfo.processInfo.environment["BOSS_NO_MIC"] == "1" { return "denied" }
         switch AVCaptureDevice.authorizationStatus(for: .audio) {
         case .authorized: return "granted"
         case .denied, .restricted: return "denied"

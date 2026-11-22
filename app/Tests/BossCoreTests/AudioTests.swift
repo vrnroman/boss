@@ -88,3 +88,47 @@ struct AudioTests {
         #expect(abs(AudioLevel.rms(tone(seconds: 1, amp: 1)) - 0.707) < 0.01)
     }
 }
+
+@Suite("Voice activity")
+struct VoiceActivityTests {
+    let gate = AudioGate()
+    @Test func steadyNoiseHasNoVoicedTime() {
+        let noise = TestAudio.roomNoise(16000 * 3)
+        #expect(gate.voicedMs(samples: noise) < 100)
+        #expect(gate.evaluateUnprompted(samples: noise) == .silent)
+    }
+    @Test func aWordInARoomIsVoiced() {
+        let s = TestAudio.speech(quiet: 16000, voice: 8000, after: 24000)
+        #expect(gate.voicedMs(samples: s) >= 400)
+        #expect(gate.evaluateUnprompted(samples: s) == .ok)
+    }
+    @Test func aOneWordAnswerPasses() {
+        // "Gateway." ~ 0.4 s of voice in a 6 s window.
+        let s = TestAudio.speech(quiet: 16000 * 2, voice: 6400, after: 16000 * 3)
+        #expect(gate.evaluateUnprompted(samples: s) == .ok)
+    }
+    @Test func aClipThatIsMostlySpeechStillPasses() {
+        let s = TestAudio.speech(quiet: 1600, voice: 9600)
+        #expect(gate.voicedMs(samples: s) >= 300)
+    }
+    @Test func digitalSilenceIsSilent() {
+        #expect(gate.evaluateUnprompted(samples: [Int16](repeating: 0, count: 32000)) == .silent)
+    }
+}
+
+@Suite("Auto gain")
+struct AutoGainTests {
+    @Test func quietRecordingIsLiftedButCapped() {
+        let quiet = TestAudio.tone(1600, amp: 1800)          // peak ~ -25 dBFS
+        let out = AutoGain.apply(quiet)
+        let peak = out.map { abs(Int32($0)) }.max() ?? 0
+        #expect(peak > 15000 && peak <= 32767)
+        let whisper = TestAudio.tone(1600, amp: 100)         // far below: gain capped at 10x
+        #expect((AutoGain.apply(whisper).map { abs(Int32($0)) }.max() ?? 0) <= 1001)
+    }
+    @Test func loudRecordingIsUntouchedAndSilenceStaysSilence() {
+        let loud = TestAudio.tone(1600, amp: 30000)
+        #expect(AutoGain.apply(loud) == loud)
+        #expect(AutoGain.apply([Int16](repeating: 0, count: 100)) == [Int16](repeating: 0, count: 100))
+    }
+}

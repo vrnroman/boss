@@ -189,6 +189,12 @@ public enum HallucinationFilter {
                 if rep == n { return nil }
             }
         }
-        return stripped.split(whereSeparator: { $0 == " " || $0 == "\n" }).joined(separator: " ")
+        var out = stripped.split(whereSeparator: { $0 == " " || $0 == "\n" }).joined(separator: " ")
+        // The vocabulary prompt ends its lists with "etc"; on a one- or two-word answer whisper
+        // sometimes copies it ("Beta." came back as "bt-beta, etc." in a real run).
+        if out.split(separator: " ").count <= 4 {
+            out = out.replacingOccurrences(of: "[,]?\\s+etc\\.?$", with: "", options: [.regularExpression, .caseInsensitive])
+        }
+        return out
     }
 }

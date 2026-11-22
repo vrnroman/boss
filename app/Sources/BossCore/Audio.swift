@@ -3,6 +3,8 @@ import Foundation
 /// Fixed-capacity ring buffer of 16 kHz Int16 samples. Keeps the last `capacity`
 /// samples so the first word of a push-to-talk is never clipped.
 public struct PreRollBuffer: Sendable {
+    /// 300 ms at 16 kHz.
+    public static let defaultSamples = 4800
     public let capacity: Int
     private var storage: [Int16]
     private var head = 0      // next write index
@@ -143,6 +145,25 @@ public enum AudioLevel {
     }
 }
 
+/// Lifts a quiet recording toward a healthy level before transcription (a webcam mic across the
+/// desk peaked at -25 dBFS in a real run, and whisper heard nothing at that level).
+public enum AutoGain {
+    /// Scales so the peak reaches `targetPeak` (fraction of full scale), never by more than `maxGain`,
+    /// and never down. Loud recordings come back unchanged.
+    public static func apply(_ samples: [Int16], targetPeak: Double = 0.7, maxGain: Double = 10) -> [Int16] {
+        var peak: Int32 = 0
+        for s in samples { let a = abs(Int32(s)); if a > peak { peak = a } }
+        guard peak > 0 else { return samples }
+        let gain = min(maxGain, targetPeak * 32767 / Double(peak))
+        guard gain > 1.05 else { return samples }
+        var out = [Int16](repeating: 0, count: samples.count)
+        for i in 0..<samples.count {
+            out[i] = Int16(max(-32767, min(32767, (Double(samples[i]) * gain).rounded())))
+        }
+        return out
+    }
+}
+
 /// Decides whether a recording is worth transcribing.
 public struct AudioGate: Sendable {
     public enum Verdict: Equatable, Sendable { case ok, tooShort, silent }
@@ -165,5 +186,30 @@ public struct AudioGate: Sendable {
             i += win
         }
         return peak < rmsFloor ? .silent : .ok
+    }
+
+    /// Milliseconds of voiced audio: 20 ms frames clearly above the recording's own noise floor
+    /// (its 10th-percentile frame level) and above twice the absolute floor. Room noise, a fan or a
+    /// hum stays near its own floor and scores ~0; a spoken word scores hundreds.
+    public func voicedMs(samples: [Int16], sampleRate: Int = 16_000) -> Int {
+        let frame = max(1, sampleRate / 50)
+        var levels: [Double] = []
+        var i = 0
+        while i + frame <= samples.count {
+            levels.append(AudioLevel.rms(samples[i..<(i + frame)]))
+            i += frame
+        }
+        guard !levels.isEmpty else { return 0 }
+        let sorted = levels.sorted()
+        let noise = sorted[Int(Double(sorted.count - 1) * 0.1)]   // the quietest tenth: the room between words
+        let threshold = max(rmsFloor * 2, noise * 2.5)   // ~8 dB above the room
+        return levels.filter { $0 > threshold }.count * 20
+    }
+
+    /// Stricter check for recordings nobody chose to start (the answer window): needs real speech.
+    public func evaluateUnprompted(samples: [Int16], sampleRate: Int = 16_000, minVoicedMs: Int = 120) -> Verdict {
+        let v = evaluate(samples: samples, sampleRate: sampleRate)
+        guard v == .ok else { return v }
+        return voicedMs(samples: samples, sampleRate: sampleRate) >= minVoicedMs ? .ok : .silent
     }
 }
