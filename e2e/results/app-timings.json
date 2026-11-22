@@ -1,0 +1,31 @@
+{
+  "at": "2026-11-22T06:00:19.913Z",
+  "timings": [
+    {
+      "label": "ambiguous: end of speech → question card",
+      "ms": 11558
+    },
+    {
+      "label": "spoken answer → original words landed",
+      "ms": 5777
+    },
+    {
+      "label": "end of speech → landed in worker (whisper + Boss + SendMessage)",
+      "ms": 5453,
+      "whisper_ms": 3158
+    },
+    {
+      "label": "end of speech → report spoken back",
+      "ms": 14639
+    },
+    {
+      "label": "Russian: end of speech → landed",
+      "ms": 5255
+    },
+    {
+      "label": "Boss restart → queued utterance delivered",
+      "ms": 6042
+    }
+  ],
+  "appExit": null
+}

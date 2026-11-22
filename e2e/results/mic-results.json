@@ -1,0 +1,25 @@
+{
+  "at": "2026-11-22T05:51:13.089Z",
+  "micOK": true,
+  "results": [
+    {
+      "test": "answer window",
+      "routed_to": "bt-beta"
+    },
+    {
+      "test": "silent window",
+      "answers_sent": 1,
+      "dropped": 0
+    },
+    {
+      "test": "hold-to-talk",
+      "said": "B T alpha, create a file named lemon.txt containing the word lemon.",
+      "heard": "bt-alpha, create a file named lemon.txt containing the word lemon.",
+      "accuracy": 1
+    },
+    {
+      "test": "hold-to-talk latency",
+      "end_of_speech_to_delivered_ms": 12809
+    }
+  ]
+}

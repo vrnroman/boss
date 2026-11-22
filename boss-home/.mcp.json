@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "boss-channel": {
+      "command": "__NODE__",
+      "args": ["__BOSS_CHANNEL__"]
+    }
+  }
+}

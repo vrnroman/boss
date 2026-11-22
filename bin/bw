@@ -1,0 +1,19 @@
+#!/bin/sh
+# bw [name] [folder] : start a Claude Code worker that Boss can address by name.
+# Records {name, folder, tty} in ~/Boss/state/sessions.json, titles the tab, then execs claude.
+set -eu
+folder="${2:-$PWD}"
+cd "$folder"
+name="${1:-$(basename "$PWD")}"
+case "$name" in *[!A-Za-z0-9._-]*) echo "bw: name may use letters, digits, . _ - only" >&2; exit 2;; esac
+state="${BOSS_HOME:-$HOME/Boss}/state"
+mkdir -p "$state"
+tty_now="$(tty 2>/dev/null || echo unknown)"
+/usr/bin/env node -e '
+const fs = require("fs"); const [f, name, folder, tty] = process.argv.slice(1);
+let s = {}; try { s = JSON.parse(fs.readFileSync(f, "utf8")); } catch {}
+s[name] = { name, folder, tty, started_at: new Date().toISOString() };
+fs.writeFileSync(f + ".tmp", JSON.stringify(s, null, 2)); fs.renameSync(f + ".tmp", f);
+' "$state/sessions.json" "$name" "$PWD" "$tty_now"
+printf '\033]0;%s\007' "$name"
+exec claude --name "$name"
