@@ -373,3 +373,16 @@ struct SpeakableTests {
         #expect(SpeechItem.speakable("plain text") == "plain text")
     }
 }
+
+@Suite("Nicknames")
+struct NicknameTests {
+    @Test func stateDecodesNicknamesAndTheTowerShowsThem() {
+        let json = #"{"routes":[],"questions":[],"reports":{},"ledger":{},"nicknames":{"reelshow-9d":"reels"}}"#
+        let st = ChannelState.decode(Data(json.utf8))!
+        #expect(st.nicknames == ["reelshow-9d": "reels"])
+        let s = [SessionInfo(pid: 1, cwd: "/w/reelshow", name: "reelshow-9d"), SessionInfo(pid: 2, cwd: "/w/guard", name: "guard-29")]
+        let rows = Tower.rows(sessions: s, state: st, now: Date())
+        #expect(rows.first { $0.name == "reelshow-9d" }?.nickname == "reels")
+        #expect(rows.first { $0.name == "guard-29" }?.nickname == nil)
+    }
+}

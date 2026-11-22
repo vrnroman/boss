@@ -461,7 +461,7 @@ public final class BossEngine {
     }
 
     public func refreshState() async {
-        if let s = await deps.channel.getState() {
+        if let s = await deps.channel.getState(sessions: sessions) {
             channelState = s
             channelReachable = true
         }

@@ -136,6 +136,8 @@ public struct TowerRow: Equatable, Sendable, Codable, Identifiable {
     /// "b/(b+m)" e.g. "14/15", nil if never routed blind.
     public var trust: String?
     public var graduated: Bool
+    /// The nickname Roman gave this session, if any (shown first; the real name stays visible).
+    public var nickname: String? = nil
 }
 
 public enum Tower {
@@ -167,7 +169,8 @@ public enum Tower {
             return TowerRow(name: s.name, cwdBase: s.cwdBase, pid: s.pid, status: s.status, group: group,
                             waitSeconds: wait, waitText: wait.map(shortDuration), questionID: q?.questionID,
                             detail: q.map { $0.question } ?? state?.reports[s.name].map { short($0.text) },
-                            trust: trust, graduated: state?.ledger[s.name]?.graduated ?? false)
+                            trust: trust, graduated: state?.ledger[s.name]?.graduated ?? false,
+                            nickname: state?.nicknames[s.name])
         }
         rows.sort { a, b in
             if a.group != b.group { return a.group < b.group }

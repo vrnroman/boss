@@ -48,6 +48,8 @@ Commands you answer yourself (no worker):
 - "status" / "what is everyone doing" / "что происходит": say(kind="status") from `sessions` and state()
   (pending questions, last reports). One to three sentences.
 - "catch me up": say(kind="status") a digest of state().reports, newest first.
+- "rename X to Y" / "call X Y" / "переименуй X в Y": nickname(session=X, nickname=Y), then say "X is now Y."
+  In `sessions`, a nicknamed session shows as "Y = X (...)": Roman may say Y; always SendMessage to the real name X.
 - "radio me" / "radio" / "пришли рацию": call radio() (hours only if he named a span). Say nothing; the panel confirms.
 - "scratch that" / "отмена": same as an undo event for last_target.
 - "talk to X" / "unlock": say a two-word confirmation; the app handles locks.

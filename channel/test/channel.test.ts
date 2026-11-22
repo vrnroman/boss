@@ -68,7 +68,7 @@ describe('MCP handshake', () => {
     assert.equal(init.result.protocolVersion, '2025-11-25');
     assert.match(init.result.instructions, /say and ask/);
     const list = await h.rpc('tools/list');
-    assert.deepEqual(list.result.tools.map((t: any) => t.name).sort(), ['ask', 'radio', 'route', 'routed', 'say', 'state']);
+    assert.deepEqual(list.result.tools.map((t: any) => t.name).sort(), ['ask', 'nickname', 'radio', 'route', 'routed', 'say', 'state']);
   });
 
   test('never negotiates 2026-07-28 (not registered as a channel there)', async () => {
@@ -513,6 +513,54 @@ describe('sessions named like boss', () => {
     const r = await h.call('route', { utterance_id: 'bn1', target: 'boss-88', explicit: true });
     assert.equal(r.decision, 'send');
     await assert.rejects(h.call('route', { utterance_id: 'bn1', target: 'boss', explicit: true }), /not allowed/);
+    await h.stop();
+  });
+});
+
+describe('nicknames', () => {
+  const live = [{ name: 'reelshow-9d', cwd: '/w/reelshow', status: 'idle' }, { name: 'guard-29', cwd: '/w/guard', status: 'busy' }];
+  test('rename a session: Boss sees "nick = name", the panel gets name -> nick, routing still uses the real name', async () => {
+    const h = await new Harness().start();
+    await h.connect();
+    await h.post('/utterance', { id: 'n1', text: 'rename reelshow to reels', sessions: live });
+    await h.wait((x) => x.params?.meta?.utterance_id === 'n1');
+    const r = await h.call('nickname', { session: 'reelshow-9d', nickname: 'Reels' });
+    assert.equal(r.nickname, 'reels');
+    await h.post('/utterance', { id: 'n2', text: 'reels: run it', sessions: live });
+    const m = await h.wait((x) => x.params?.meta?.utterance_id === 'n2');
+    assert.match(m.params.meta.sessions, /reels = reelshow-9d \(reelshow, idle\)/);
+    assert.deepEqual((await h.get('/state')).json.nicknames, { 'reelshow-9d': 'reels' });
+    await h.stop();
+  });
+
+  test('the nickname follows the project folder when the session restarts under a new derived name', async () => {
+    const h = await new Harness().start();
+    await h.connect();
+    await h.post('/utterance', { id: 'f1', text: 'x', sessions: live });
+    await h.call('nickname', { session: 'reelshow-9d', nickname: 'reels' });
+    await h.stop();
+    const h2 = await new Harness(h.home).start();
+    await h2.connect();
+    const restarted = [{ name: 'reelshow-3f', cwd: '/w/reelshow', status: 'idle' }];
+    const st = await h2.get(`/state?sessions=${encodeURIComponent(JSON.stringify(restarted))}`);
+    assert.deepEqual(st.json.nicknames, { 'reelshow-3f': 'reels' });
+    await h2.stop();
+  });
+
+  test('renaming again replaces, an empty nickname removes, unknown sessions are refused, choices accept nicknames', async () => {
+    const h = await new Harness().start();
+    await h.connect();
+    await h.post('/utterance', { id: 'r1', text: 'x', sessions: live });
+    await h.call('nickname', { session: 'guard-29', nickname: 'guard' });
+    await h.call('nickname', { session: 'guard', nickname: 'shield' });
+    assert.deepEqual((await h.get('/state')).json.nicknames, { 'guard-29': 'shield' });
+    const s1 = h.sse(); await s1.ready;
+    await h.call('ask', { question: 'which?', choices: ['shield', 'reelshow-9d'], about_id: 'r1' });
+    assert.deepEqual((await s1.until((e) => e.event === 'ask')).data.choices, ['guard-29', 'reelshow-9d']);
+    s1.close();
+    await h.call('nickname', { session: 'guard-29', nickname: '' });
+    assert.deepEqual((await h.get('/state')).json.nicknames, {});
+    await assert.rejects(h.call('nickname', { session: 'nope', nickname: 'x' }), /no live session/);
     await h.stop();
   });
 });

@@ -29,7 +29,7 @@ final class FakeChannel: ChannelAPI, @unchecked Sendable {
     func postAnswer(questionID: String, text: String) async -> PostResult { record("/answer", ["question_id": questionID, "text": text]) }
     func postUndo(utteranceID: String) async -> PostResult { record("/undo", ["utterance_id": utteranceID]) }
     func cancelRoute(routeID: String) async -> PostResult { record("/cancel_route", ["route_id": routeID]) }
-    func getState() async -> ChannelState? { state.value }
+    func getState(sessions: [SessionInfo]) async -> ChannelState? { state.value }
     func health() async -> Bool? { true }
     var paths: [String] { calls.value.map(\.path) }
 }

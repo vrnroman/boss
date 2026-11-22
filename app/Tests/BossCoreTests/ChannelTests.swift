@@ -58,7 +58,7 @@ struct ChannelClientTests {
 
     @Test func noTokenNoAuthHeader() async {
         let tr = RecordingTransport()
-        _ = await client(tr, token: nil).getState()
+        _ = await client(tr, token: nil).getState(sessions: [])
         #expect(tr.requests.value[0].value(forHTTPHeaderField: "Authorization") == nil)
     }
 
@@ -71,7 +71,7 @@ struct ChannelClientTests {
          "ledger":{"payments":{"blind":14,"misses":1,"graduated":true},"gateway":{"blind":0,"misses":0,"graduated":false}},
          "settings":{"humor":2,"allow":"*"}}
         """#.utf8))
-        let s = try #require(await client(tr).getState())
+        let s = try #require(await client(tr).getState(sessions: []))
         #expect(s.routes.first?.target == "payments")
         #expect(s.routes.first?.status == "send")
         #expect(s.questions.first?.choices == ["blue", "green"])

@@ -143,7 +143,10 @@ export class Channel {
       .map((x) => ({ name: str(x.name, 60).trim(), cwd: str(x.cwd, 300), status: str(x.status, 20) }))
       .filter((x) => x.name && !this.isSelf(x.name) && allowed(this.allow, x.name))
       .slice(0, 30)
-      .map((x) => `${x.name} (${x.cwd.split('/').filter(Boolean).pop() ?? '-'}, ${x.status || '?'})`);
+      .map((x) => {
+        const nick = this.nicknamesBySession()[x.name];
+        return `${nick ? `${nick} = ` : ''}${x.name} (${x.cwd.split('/').filter(Boolean).pop() ?? '-'}, ${x.status || '?'})`;
+      });
     const last = [...this.state.routes].reverse().find((r) => r.sent_at);
     const age = last?.sent_at ? Math.round((this.state.now() - last.sent_at) / 1000) : undefined;
     return {
@@ -154,8 +157,31 @@ export class Channel {
   }
 
   radioRunning = false;
-  /** The live sessions the app sent with the last utterance: [{name, cwd}]. */
+  /** The live sessions the app sent with the last utterance (or GET /state?sessions=): [{name, cwd}]. */
   lastSessions: { name: string; cwd: string }[] = [];
+
+  static cleanNickname(n: string): string {
+    return n.toLowerCase().replace(/[^a-z0-9а-яё _-]/gi, '').trim().replace(/\s+/g, '-').slice(0, 40);
+  }
+
+  /** nickname -> the live session it means now: same name first, else the one live session in the same folder. */
+  resolveNicknames(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const n of this.state.nicknames) {
+      const byName = this.lastSessions.find((x) => x.name === n.name);
+      const byCwd = this.lastSessions.filter((x) => x.cwd && x.cwd === n.cwd);
+      const hit = byName ?? (byCwd.length === 1 ? byCwd[0] : undefined);
+      if (hit) out[n.nickname] = hit.name;
+    }
+    return out;
+  }
+
+  /** session name -> nickname, for the panel. */
+  nicknamesBySession(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [nick, name] of Object.entries(this.resolveNicknames())) out[name] = nick;
+    return out;
+  }
 
   /** A routing question's choices must be session names: map folder names (a real Haiku slip) to them. */
   normalizeChoices(choices: string[]): string[] {
@@ -164,7 +190,9 @@ export class Channel {
     const out: string[] = [];
     for (const c of choices) {
       const l = c.toLowerCase();
+      const viaNick = this.resolveNicknames()[Channel.cleanNickname(c)];
       const hit = this.lastSessions.find((x) => x.name.toLowerCase() === l)
+        ?? (viaNick ? this.lastSessions.find((x) => x.name === viaNick) : undefined)
         ?? this.lastSessions.find((x) => base(x.cwd) === l)
         ?? this.lastSessions.find((x) => base(x.cwd).includes(l) || l.includes(base(x.cwd)));
       const v = hit ? hit.name : c;
@@ -210,6 +238,7 @@ export class Channel {
       reports: this.state.reports,
       ledger: this.state.ledgerView(),
       settings: { humor: this.humor, allow: this.allow },
+      nicknames: this.nicknamesBySession(),
     };
   }
 
@@ -302,6 +331,24 @@ export class Channel {
       },
     });
     this.mcp.addTool({
+      name: 'nickname',
+      description: 'Roman renamed a session ("rename reelshow-9d to reels", "call guard-29 guard"): save nickname for that session. Address it by its real name in SendMessage; Roman may now say the nickname. Empty nickname removes it.',
+      inputSchema: { type: 'object', properties: { session: { type: 'string', description: 'real session name, or its current nickname' }, nickname: { type: 'string' } }, required: ['session', 'nickname'] },
+      handler: (a) => {
+        const raw = str(a.session, 100).trim();
+        const name = this.resolveNicknames()[Channel.cleanNickname(raw)] ?? raw;
+        const live = this.lastSessions.find((x) => x.name === name);
+        if (!live) throw new ToolError(`no live session named "${raw}"`);
+        const nick = Channel.cleanNickname(str(a.nickname, 60));
+        s.nicknames = s.nicknames.filter((n) => n.name !== name && n.nickname !== nick);
+        if (nick) s.nicknames.push({ nickname: nick, name, cwd: live.cwd, at: s.iso() });
+        s.save();
+        s.emit('nicknames', { nicknames: this.nicknamesBySession() });
+        this.log('nickname', { name, nickname: nick || null });
+        return JSON.stringify({ ok: true, session: name, nickname: nick || null });
+      },
+    });
+    this.mcp.addTool({
       name: 'radio',
       description: 'Roman said "radio me": render a spoken team-radio recap of recent reports and open questions and send it to his phone (Telegram audio). Runs in the background; the panel confirms when it is sent. hours = how far back (optional).',
       inputSchema: { type: 'object', properties: { hours: { type: 'number' } } },
@@ -372,8 +419,13 @@ export class Channel {
       switch (key) {
         case 'GET /health':
           return this.send(res, 200, { ok: true, boss_connected: this.mcp.initialized, version: this.opts.version ?? '1.0.0', uptime_s: Math.round((Date.now() - this.started) / 1000) });
-        case 'GET /state':
+        case 'GET /state': {
+          const q = url.searchParams.get('sessions');
+          if (q) {
+            try { this.routingContext(JSON.parse(q)); } catch { /* ignore a malformed list */ }
+          }
           return this.send(res, 200, this.stateView());
+        }
         case 'GET /ledger':
           return this.send(res, 200, s.classLedgerView());
         case 'GET /events': {
