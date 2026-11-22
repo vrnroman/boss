@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { pickItems, script, sendAllowed, speakable } from '../boss-radio.mjs';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 
 const now = new Date('2026-11-22T10:40:00Z'); // 18:40 SGT
 const ev = (at, kind, text, lang) => ({ type: 'say', at, data: { kind, text, lang } });
@@ -43,7 +43,7 @@ test('dry run renders a real audio file with the radio sounds and sends nothing'
 });
 
 test('a test, demo or sandbox can never send to Telegram, even without --dry', () => {
-  const real = join(homedir(), 'Boss');
+  const real = join(userInfo().homedir, 'Boss');
   assert.equal(sendAllowed({}, real), true);
   assert.equal(sendAllowed({ BOSS_RADIO_DRY: '1' }, real), false);
   assert.equal(sendAllowed({ BOSS_NO_TELEGRAM: '1' }, real), false);

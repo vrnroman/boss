@@ -8,7 +8,7 @@
 //      BOSS_RADIO_DRY=1 (same as --dry), TELEGRAM_ENV (~/.claude/secrets/telegram.env)
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { homedir, userInfo } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -95,7 +95,8 @@ function sendTelegram(path, caption) {
 /** Telegram only from the real install (same rule as the app): never from a test, demo or sandbox. */
 export function sendAllowed(env = process.env, home = HOME) {
   if (env.BOSS_RADIO_DRY === '1' || env.BOSS_NO_TELEGRAM === '1' || env.BOSS_DEBUG_CONTROL === '1') return false;
-  return resolve(home) === resolve(join(homedir(), 'Boss'));
+  // userInfo, not $HOME: a sandbox that sets HOME must not look like the real install.
+  return resolve(home) === resolve(join(userInfo().homedir, 'Boss'));
 }
 
 export async function radio({ hours, dry = !sendAllowed(), now = new Date() } = {}) {
