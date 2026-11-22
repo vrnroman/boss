@@ -153,7 +153,9 @@ async function main() {
 
   // 2. Russian.
   end = scene('russian', 'Russian works the same way');
+  await app('POST', '/language', { lang: 'ru' });
   await say('Сайт, поменяй главный заголовок на: Деньги между командами за секунды. И отчитайся.', 'Milena');
+  await app('POST', '/language', { lang: 'en' });
   await waitSpoken((s) => /site/i.test(s.text) && /[а-яё]/i.test(s.text), 240_000, 'site ru report');
   await sleep(4000); end();
 

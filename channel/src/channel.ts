@@ -13,7 +13,7 @@ import { State, graduated, UNDO_WINDOW_MS, type BossEvent } from './state.ts';
 export const MAX_BODY = 64 * 1024;
 export const CONFIRM_WINDOW_MS = 2500;
 
-export const instructionsFor = (allow: string): string => INSTRUCTIONS + `\nYou may only route to sessions whose names match: ${allow} (never boss, never yourself).`;
+export const instructionsFor = (allow: string, self = 'boss'): string => INSTRUCTIONS + `\nYou are the session named exactly "${self}". You may route to every other session whose name matches: ${allow}, including sessions whose names merely contain "boss" (such as boss-88).`;
 
 export const INSTRUCTIONS = `Roman's words reach you as <channel source="boss-channel" kind="utterance" utterance_id="..." mode="..." lang="..."> events; the tag body is his transcript, verbatim.
 kind="answer" carries his answer to a question you asked (question_id, about_id, session attributes). kind="undo" means "scratch that" for utterance_id.
@@ -87,7 +87,7 @@ export class Channel {
     this.confirmWindowMs = opts.confirmWindowMs ?? CONFIRM_WINDOW_MS;
     mkdirSync(join(opts.home, 'logs'), { recursive: true });
     this.logFile = join(opts.home, 'logs', 'channel.log');
-    this.mcp = new McpServer({ input: opts.input, output: opts.output, instructions: instructionsFor(opts.allow ?? '*'), log: (s) => this.log('mcp', { msg: s }) });
+    this.mcp = new McpServer({ input: opts.input, output: opts.output, instructions: instructionsFor(opts.allow ?? '*', opts.selfName ?? 'boss'), log: (s) => this.log('mcp', { msg: s }) });
     this.mcp.onInitialized = () => {
       this.log('boss_connected', {});
       this.state.emit('boss', { connected: true });

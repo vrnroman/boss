@@ -40,11 +40,13 @@ final class FakeTranscriber: Transcriber, @unchecked Sendable {
     let fail = Box<Bool>(false)
     let calls = Box<Int>(0)
     let prompts = Box<[String]>([])
+    let languages = Box<[String?]>([])
     /// Called inside transcribe, so tests can check what exists on disk at that moment.
     var onCall: (@Sendable () -> Void)?
     func transcribe(wav: Data, prompt: String, language: String?) async throws -> Transcript {
         calls.mutate { $0 += 1 }
         prompts.mutate { $0.append(prompt) }
+        languages.mutate { $0.append(language) }
         onCall?()
         if fail.value { throw TranscriberError.http(500, "down") }
         return Transcript(text: text.value, lang: lang.value)

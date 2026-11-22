@@ -55,14 +55,18 @@ struct EngineTests {
         #expect(!rig.channel.paths.contains("/utterance"))
     }
 
-    @Test func answerWindowSpeechDetectedAsOtherLanguageIsDropped() async {
+    @Test func whisperAlwaysGetsTheChosenLanguageNeverAuto() async {
         let rig = Rig()
-        rig.transcriber.text.value = "Ja, genau"
-        rig.transcriber.lang.value = "de"
-        rig.engine.handle(ask())
-        #expect(await eventually { rig.recorder.stops == 1 })
-        try? await Task.sleep(nanoseconds: 50_000_000)
-        #expect(!rig.channel.paths.contains("/answer"))
+        rig.engine.deps.settings.languageLock = "auto"          // an old setting
+        #expect(rig.engine.deps.settings.languageLock == "en")
+        _ = rig.engine.beginTalk(source: .button)
+        _ = await rig.engine.endTalk()
+        rig.engine.language = "ru"
+        #expect(rig.engine.deps.settings.languageLock == "ru")
+        _ = rig.engine.beginTalk(source: .button)
+        _ = await rig.engine.endTalk()
+        #expect(await eventually { rig.transcriber.languages.value.count == 2 })
+        #expect(rig.transcriber.languages.value == ["en", "ru"])
     }
 
     @Test func holdToTalkKeepsAMislabelledLatinTranscript() async {
