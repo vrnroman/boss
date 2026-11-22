@@ -20,6 +20,7 @@ export async function freePort(): Promise<number> {
 export type Msg = { jsonrpc: string; id?: number | string; method?: string; params?: any; result?: any; error?: any };
 
 export class Harness {
+  static live = new Set<ChildProcess>();
   child!: ChildProcess;
   home: string;
   port = 0;
@@ -55,6 +56,8 @@ export class Harness {
       }
     });
     this.child.stderr!.on('data', (d) => (this.stderr += d));
+    // A failed assertion skips stop(): never let a leftover server keep the test run alive.
+    Harness.live.add(this.child);
     for (let i = 0; i < 100; i++) {
       try { await this.get('/health'); return this; } catch { await new Promise((r) => setTimeout(r, 50)); }
     }
@@ -172,3 +175,7 @@ export class Harness {
     if (this.child.exitCode === null) this.child.kill('SIGKILL');
   }
 }
+
+process.on('beforeExit', () => { for (const c of Harness.live) if (c.exitCode === null) c.kill('SIGKILL'); });
+import { after as afterAll } from 'node:test';
+afterAll(() => { for (const c of Harness.live) if (c.exitCode === null) c.kill('SIGKILL'); });

@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func applicationDidFinishLaunching(_ note: Notification) {
         retireOlderInstances()
+        defer { engine?.language = settings.languageLock }
         try? FileManager.default.createDirectory(at: paths.outbox, withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: paths.logs, withIntermediateDirectories: true)
         let paths = self.paths
@@ -117,10 +118,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         ])
         p.contentView = fx
         panel = p
-        if ProcessInfo.processInfo.environment["BOSS_PANEL_EXPANDED"] == "1" { engine.panelExpanded = true }
-        let s = engine.panelExpanded ? Self.expandedSize : Self.pillSize
+        // The panel stays out of the way: only the menu-bar dot shows. Clicking the dot opens the full
+        // panel. Tests and the film ask for it up front with BOSS_PANEL_EXPANDED=1.
+        let showAtLaunch = ProcessInfo.processInfo.environment["BOSS_PANEL_EXPANDED"] == "1"
+        engine.panelExpanded = true
+        let s = Self.expandedSize
         p.setFrame(NSRect(origin: initialOrigin(size: s), size: s), display: true)
-        p.orderFrontRegardless()
+        if showAtLaunch { p.orderFrontRegardless(); engine.panelVisible = true } else { engine.panelVisible = false }
         NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: p, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.saveTopRight() }
         }
@@ -158,6 +162,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    var statusMenu: NSMenu?
+
+    @objc func statusClicked(_ sender: Any?) {
+        let ev = NSApp.currentEvent
+        if ev?.type == .rightMouseUp || ev?.modifierFlags.contains(.control) == true, let m = statusMenu {
+            statusItem.menu = m
+            statusItem.button?.performClick(nil)
+            statusItem.menu = nil
+        } else {
+            togglePanel()
+        }
+    }
+
     func togglePanel() {
         if panel.isVisible { panel.orderOut(nil); engine.panelVisible = false }
         else { panel.orderFrontRegardless(); engine.panelVisible = true }
@@ -169,7 +186,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         let menu = NSMenu()
         menu.delegate = self
-        statusItem.menu = menu
+        statusMenu = menu
+        // Click: show or hide the panel. Right-click or control-click: the menu.
+        statusItem.button?.target = self
+        statusItem.button?.action = #selector(statusClicked(_:))
+        statusItem.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
         updateStatusIcon(force: true)
     }
 
@@ -217,8 +238,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             s.engine.deps.telegram?.enabled = s.settings.telegramFallback && s.telegramAllowed
         })
         let lang = NSMenu()
-        for (code, title) in [("auto", "Auto (English / Russian)"), ("en", "English"), ("ru", "Русский")] {
-            lang.addItem(item(title, settings.languageLock == code) { [weak self] in self?.settings.languageLock = code })
+        for (code, title) in [("en", "I speak English"), ("ru", "Я говорю по-русски")] {
+            lang.addItem(item(title, settings.languageLock == code) { [weak self] in self?.engine.language = code })
         }
         let langItem = NSMenuItem(title: "Language", action: nil, keyEquivalent: ""); langItem.submenu = lang
         menu.addItem(langItem)

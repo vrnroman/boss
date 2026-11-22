@@ -6,7 +6,7 @@ public final class BossSettings: @unchecked Sendable {
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         defaults.register(defaults: [
-            "radioSounds": true, "livePreview": true, "humor": 1, "languageLock": "auto",
+            "radioSounds": true, "livePreview": true, "humor": 1, "languageLock": "en",
             "voice": "", "muted": false, "kokoroRussian": false, "telegramFallback": true,
             "debugControl": false, "userWords": [String](),
         ])
@@ -18,13 +18,14 @@ public final class BossSettings: @unchecked Sendable {
         get { min(3, max(0, defaults.integer(forKey: "humor"))) }
         set { defaults.set(min(3, max(0, newValue)), forKey: "humor") }
     }
-    /// "auto" | "en" | "ru"
+    /// "en" | "ru". Roman picks the language he will speak; there is no auto-detect (it turned room
+    /// noise into Japanese). Anything else, including an old "auto", reads as English.
     public var languageLock: String {
-        get { let v = defaults.string(forKey: "languageLock") ?? "auto"; return ["auto", "en", "ru"].contains(v) ? v : "auto" }
-        set { defaults.set(["auto", "en", "ru"].contains(newValue) ? newValue : "auto", forKey: "languageLock") }
+        get { defaults.string(forKey: "languageLock") == "ru" ? "ru" : "en" }
+        set { defaults.set(newValue == "ru" ? "ru" : "en", forKey: "languageLock") }
     }
-    /// Whisper `language` parameter: nil = auto.
-    public var whisperLanguage: String? { languageLock == "auto" ? nil : languageLock }
+    /// Whisper `language` parameter: always the chosen language.
+    public var whisperLanguage: String? { languageLock }
     /// Preferred English system voice name ("" = best installed).
     public var voice: String { get { defaults.string(forKey: "voice") ?? "" } set { defaults.set(newValue, forKey: "voice") } }
     public var muted: Bool { get { defaults.bool(forKey: "muted") } set { defaults.set(newValue, forKey: "muted") } }

@@ -95,6 +95,10 @@ public final class BossEngine {
     public private(set) var answerWindow: AnswerWindow?
     /// Debug control only: keep a 6 s answer window even without mic permission (see openAnswerWindow).
     public var allowSilentAnswerWindow = false
+    /// The language Roman speaks ("en" | "ru"), shown and switched in the panel.
+    public var language: String = "en" {
+        didSet { if deps.settings.languageLock != language { deps.settings.languageLock = language } }
+    }
     /// Set by the app: renders the panel's real view hierarchy to a PNG (works with the display asleep).
     public var snapshotter: ((String) -> Bool)?
     public var hotkeyActive = false
@@ -325,7 +329,8 @@ public final class BossEngine {
                 let unpromptedOther = item.mode == "answer" && deps.settings.whisperLanguage == nil && !(t.lang == "en" || t.lang == "ru")
                 guard !noScript, !unpromptedOther, let clean = HallucinationFilter.clean(t.text) else {
                     item = (try? deps.outbox.update(id) { $0.state = .failed; $0.final = true; $0.error = "filtered"; $0.text = t.text }) ?? item
-                    feed.setTranscript(utteranceID: id, text: t.text.isEmpty ? "(nothing heard)" : t.text, lang: t.lang)
+                    // Whatever whisper made of noise is not shown as if Roman said it (it once read "ご視聴ありがとうございました").
+                    feed.setTranscript(utteranceID: id, text: "(nothing heard)", lang: nil)
                     feed.setStatus(utteranceID: id, "dropped", note: "nothing to send")
                     return item
                 }
@@ -661,6 +666,11 @@ extension BossEngine: DebugControlHandler {
     public func debugUndo() async -> HTTPResponse {
         guard let (uid, r) = await undo() else { return .error(409, "nothing to undo") }
         return .json(r.isAccepted ? 200 : 502, ["ok": r.isAccepted, "utterance_id": uid])
+    }
+
+    public func debugLanguage(_ code: String) -> HTTPResponse {
+        language = code
+        return .json(200, ["ok": true, "lang": language])
     }
 
     public func debugSnapshot(path: String) -> HTTPResponse {

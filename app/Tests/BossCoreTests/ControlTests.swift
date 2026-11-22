@@ -63,6 +63,7 @@ struct HTTPParserTests {
     func debugSpoken() -> HTTPResponse { calls.append("spoken"); return .json(200, [:]) }
     func debugStatus() -> HTTPResponse { calls.append("status"); return .json(200, [:]) }
     func debugSnapshot(path: String) -> HTTPResponse { calls.append("snapshot:\(path)"); return .json(200, [:]) }
+    func debugLanguage(_ code: String) -> HTTPResponse { calls.append("language:\(code)"); return .json(200, [:]) }
 }
 
 @Suite("Debug control router")

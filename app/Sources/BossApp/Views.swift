@@ -261,10 +261,33 @@ struct ControlsRow: View {
             )
             .help("Press and hold to talk (or hold Right Option)")
 
+            LanguageToggle(engine: engine)
             IconButton(symbol: engine.muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
                        active: engine.muted, help: engine.muted ? "Unmute" : "Mute") { engine.setMuted(!engine.muted) }
             IconButton(symbol: "arrow.counterclockwise", active: false, help: "Repeat last") { engine.repeatLast() }
         }
+    }
+}
+
+/// EN | RU: the language Roman will speak. Whisper is told it; nothing is auto-detected.
+struct LanguageToggle: View {
+    @Bindable var engine: BossEngine
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(["en", "ru"], id: \.self) { code in
+                Button { engine.language = code } label: {
+                    Text(code.uppercased())
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(engine.language == code ? .black : .white.opacity(0.7))
+                        .frame(width: 30, height: 38)
+                        .background(engine.language == code ? Color.white.opacity(0.85) : Color.clear)
+                }
+                .buttonStyle(.plain)
+                .help(code == "en" ? "I speak English" : "Я говорю по-русски")
+            }
+        }
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.08)))
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
     }
 }
 

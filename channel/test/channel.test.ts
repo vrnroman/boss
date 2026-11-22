@@ -413,7 +413,8 @@ describe('routing context', () => {
   test('the allow list is part of the instructions Boss gets', async () => {
     const h = await new Harness().start({ BOSS_ALLOW: 'bt-*' });
     const init = await h.connect();
-    assert.match(init.result.instructions, /match: bt-\*/);
+    assert.match(init.result.instructions, /matches: bt-\*/);
+    assert.match(init.result.instructions, /including sessions whose names merely contain "boss"/);
     await h.stop();
   });
 });
@@ -499,6 +500,19 @@ describe('routing question choices', () => {
     await h.call('ask', { question: 'blue or green?', choices: ['blue', 'green'], session: 'bt-beta' });
     assert.deepEqual((await s.until((e) => e.event === 'ask' && e.data.session === 'bt-beta')).data.choices, ['blue', 'green']);
     s.close();
+    await h.stop();
+  });
+});
+
+describe('sessions named like boss', () => {
+  test('a worker called boss-88 is offered to Boss and routable; only the exact self name is not', async () => {
+    const h = await new Harness().start({ BOSS_NAME: 'boss' });
+    await h.connect();
+    await h.post('/utterance', { id: 'bn1', text: 'x', sessions: [{ name: 'boss-88', cwd: '/w/boss', status: 'idle' }, { name: 'boss', cwd: '/b', status: 'idle' }] });
+    assert.equal((await h.wait((x) => x.params?.meta?.utterance_id === 'bn1')).params.meta.sessions, 'boss-88 (boss, idle)');
+    const r = await h.call('route', { utterance_id: 'bn1', target: 'boss-88', explicit: true });
+    assert.equal(r.decision, 'send');
+    await assert.rejects(h.call('route', { utterance_id: 'bn1', target: 'boss', explicit: true }), /not allowed/);
     await h.stop();
   });
 });

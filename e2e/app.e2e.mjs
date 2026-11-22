@@ -165,6 +165,7 @@ test('spoken English: transcribed, routed to the named worker, the work happens,
 });
 
 test('spoken Russian: transcribed in Russian, routed by the Russian name, reported in Russian', async () => {
+  assert.equal((await app('POST', '/language', { lang: 'ru' })).status, 200);
   const wav = speech('ru1', 'Бета, создай файл под названием фрукты и напиши в нём слово вишня. Потом отчитайся.', 'Milena');
   const t0 = Date.now();
   const r = (await app('POST', '/inject', { wav_path: wav })).json;
@@ -183,6 +184,7 @@ test('spoken Russian: transcribed in Russian, routed by the Russian name, report
   assert.equal(said.lang, 'ru');
   assert.match(said.text, /[а-яё]/i);
   assert.ok(since);
+  assert.equal((await app('POST', '/language', { lang: 'en' })).status, 200);
 });
 
 test('a worker asks Roman a question: card with choices, a tap answers, the worker acts on it', async () => {
