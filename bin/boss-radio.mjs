@@ -43,7 +43,11 @@ export function script({ reports, questions, dropped }, now = new Date()) {
   return segs;
 }
 
+/** As the app does: the Russian system voice reads « » as "backslash", so quote marks go. */
+export const speakable = (t) => t.replace(/[«»„“”\\]/g, '').replace(/\s+/g, ' ').trim();
+
 async function speakTo(seg, out) {
+  seg = { ...seg, text: speakable(seg.text) };
   if (seg.lang === 'en') {
     try {
       const r = await fetch(`${TTS}/speak`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text: seg.text, lang: 'en' }), signal: AbortSignal.timeout(30_000) });

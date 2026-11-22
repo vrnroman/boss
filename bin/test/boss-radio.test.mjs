@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { pickItems, script, sendAllowed } from '../boss-radio.mjs';
+import { pickItems, script, sendAllowed, speakable } from '../boss-radio.mjs';
 import { homedir } from 'node:os';
 
 const now = new Date('2026-11-22T10:40:00Z'); // 18:40 SGT
@@ -59,4 +59,9 @@ test('without --dry, a sandbox home still does not send', () => {
   delete env.BOSS_RADIO_DRY;
   const r = JSON.parse(execFileSync(process.execPath, [join(import.meta.dirname, '..', 'boss-radio.mjs')], { env, encoding: 'utf8' }).trim());
   assert.equal(r.sent, false);
+});
+
+test('recap text is read without quote marks (the Russian voice says "backslash" for « »)', () => {
+  assert.equal(speakable('site: заголовок «Деньги за секунды»'), 'site: заголовок Деньги за секунды');
+  assert.equal(speakable('a \\ “b”'), 'a b');
 });
