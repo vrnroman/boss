@@ -4,7 +4,8 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { pickItems, script } from '../boss-radio.mjs';
+import { pickItems, script, sendAllowed } from '../boss-radio.mjs';
+import { homedir } from 'node:os';
 
 const now = new Date('2026-11-22T10:40:00Z'); // 18:40 SGT
 const ev = (at, kind, text, lang) => ({ type: 'say', at, data: { kind, text, lang } });
@@ -39,4 +40,23 @@ test('dry run renders a real audio file with the radio sounds and sends nothing'
   assert.ok(existsSync(r.path));
   assert.ok(r.seconds > 3 && r.seconds < 60, `${r.seconds} s`);
   assert.ok(!existsSync(join(home, 'state', 'radio-last.json')), 'a dry run does not move the cutoff');
+});
+
+test('a test, demo or sandbox can never send to Telegram, even without --dry', () => {
+  const real = join(homedir(), 'Boss');
+  assert.equal(sendAllowed({}, real), true);
+  assert.equal(sendAllowed({ BOSS_RADIO_DRY: '1' }, real), false);
+  assert.equal(sendAllowed({ BOSS_NO_TELEGRAM: '1' }, real), false);
+  assert.equal(sendAllowed({ BOSS_DEBUG_CONTROL: '1' }, real), false);
+  assert.equal(sendAllowed({}, '/tmp/boss-sandbox/Boss'), false);
+});
+
+test('without --dry, a sandbox home still does not send', () => {
+  const home = mkdtempSync(join(tmpdir(), 'boss-radio-nodry-'));
+  mkdirSync(join(home, 'state'));
+  writeFileSync(join(home, 'state', 'events.jsonl'), '');
+  const env = { ...process.env, BOSS_HOME: home, TELEGRAM_ENV: '/nonexistent' };
+  delete env.BOSS_RADIO_DRY;
+  const r = JSON.parse(execFileSync(process.execPath, [join(import.meta.dirname, '..', 'boss-radio.mjs')], { env, encoding: 'utf8' }).trim());
+  assert.equal(r.sent, false);
 });

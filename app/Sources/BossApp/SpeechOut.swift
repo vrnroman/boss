@@ -68,7 +68,7 @@ final class SpeechOut: NSObject, Speaker, AVSpeechSynthesizerDelegate, AVAudioPl
     }
 
     private func system(_ text: String, ru: Bool) async {
-        let u = AVSpeechUtterance(string: text)
+        let u = AVSpeechUtterance(string: SpeechItem.speakable(text))
         u.voice = ru ? Self.russianVoice() : Self.englishVoice(preferred: settings.voice)
         u.rate = AVSpeechUtteranceDefaultSpeechRate * (ru ? 1.0 : 1.02)
         await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in

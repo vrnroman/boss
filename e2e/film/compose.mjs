@@ -42,10 +42,12 @@ async function narrate(text, file) {
 }
 async function kokoro(text, file, voice = 'af_heart') {
   if (existsSync(file)) return dur(file);
-  const r = await fetch('http://127.0.0.1:8792/speak', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, lang: 'en', voice }) });
+  // Same voices as the app: Kokoro for English, Milena for Russian.
+  const lang = /[а-яё]/i.test(text) ? 'ru' : 'en';
+  const r = await fetch('http://127.0.0.1:8792/speak', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text, lang, voice }) });
   if (r.status === 422 || !r.ok) {
     const aiff = file.replace(/\.wav$/, '.aiff');
-    execFileSync('say', ['-v', /[а-яё]/i.test(text) ? 'Milena' : 'Samantha', '-o', aiff, text]);
+    execFileSync('say', ['-v', /[а-яё]/i.test(text) ? 'Milena' : 'Samantha', '-o', aiff, text.replace(/[«»„“”\\]/g, '')]);
     ff(['-i', aiff, '-ar', '24000', '-ac', '1', file]);
   } else {
     writeFileSync(file, Buffer.from(await r.arrayBuffer()));
@@ -180,9 +182,9 @@ const NARR = {
   'worker-question': 'When a session needs a decision, the question comes to you as a card with buttons. Tap, or answer by voice.',
   status: 'Ask what everyone is doing, and Boss answers from the live session list, without disturbing anyone.',
   scratch: 'Changed your mind? Say scratch that. The session is told to drop the last instruction.',
-  radio: 'Leaving the office? Say radio me, and a spoken recap of the reports goes to your phone for the commute.',
+  radio: 'Leaving the office? Say radio me, and a spoken recap of the reports goes to your phone for the commute. In this demo it is rendered, not sent.',
   tests: 'And the testing. Every flow you just saw is also an automated end to end test against real Claude sessions, including a real microphone in the room. Plus more than two hundred unit tests, and a dependency audit with zero known vulnerabilities.',
-  close: 'What stayed synthetic in this film: the commands were spoken by the Mac voice and fed in after the microphone, so the recording is clean. The microphone path itself is tested separately, through the speakers and the webcam mic. Everything else was the real product.',
+  close: 'What stayed synthetic: the commands were spoken by the Mac voice and fed in after the microphone. The display was asleep, so the panel is drawn from the app itself and the terminals from the real session text, not filmed off the screen. Boss, the workers and every answer were real.',
 };
 
 async function main() {
@@ -214,7 +216,8 @@ async function main() {
       <li>npm audit and pip-audit: <span class="g">0</span> known vulnerabilities · no Docker image to scan</li></ul>`),
     close: card('close', `<div class="k">What stayed synthetic</div><h1>Real product, synthetic voice in</h1><ul>
       <li>Commands were spoken by macOS <span class="m">say</span> and fed in after the mic</li>
-      <li>Boss's answers re-voiced from its speech log, same Kokoro voice</li>
+      <li>Boss's answers re-voiced from its speech log with the app's voices (Kokoro, Milena)</li>
+      <li>Display asleep: the panel is the app's real view rendered offscreen, the terminals are the real session text redrawn</li>
       <li>The real mic path is tested separately: speakers → webcam mic → whisper, ${C.micAccuracy ?? '?'} word accuracy</li>
       <li class="a">Still to check with you: the Right Option hotkey (needs Input Monitoring)</li></ul>`),
   };
@@ -235,11 +238,20 @@ async function main() {
   const step = 1 / FPS;
   const pushFrame = (p, q, d) => { panelList.push({ f: p, d }); termList.push({ f: q, d }); };
   const blank = card('blank', '');
+  let busyUntil = 0;
+  const audioEnd = () => Math.max(busyUntil, ...audio.map((x) => x.at + (x.d ?? 0)));
   for (const item of out) {
+    // Never start a narration over Boss still talking: hold the last frame until the audio ends.
+    const quietAt = audioEnd();
+    if (quietAt > T && panelList.length) {
+      const last = { p: panelList.at(-1).f, q: termList.at(-1).f };
+      pushFrame(last.p, last.q, quietAt - T + 0.4);
+      T = quietAt + 0.4;
+    }
     if (item.kind === 'card') {
       const d = item.narr.d + 1.2;
       pushFrame(item.png, item.png, d);
-      audio.push({ f: item.narr.f, at: T + 0.4 });
+      audio.push({ f: item.narr.f, at: T + 0.4, d: item.narr.d });
       subs.push({ a: T + 0.4, b: T + 0.4 + item.narr.d, text: item.narr.text, style: 'Cap' });
       item.at = T; item.d = d;
       T += d;
@@ -250,7 +262,7 @@ async function main() {
     // Hold the scene's first frame while the narration plays.
     const hold = (item.narr?.d ?? 0) + 0.6;
     pushFrame(frameAt(panel, sc.start).f, frameAt(term, sc.start).f, hold);
-    if (item.narr) { audio.push({ f: item.narr.f, at: T + 0.2 }); subs.push({ a: T + 0.2, b: T + 0.2 + item.narr.d, text: item.narr.text, style: 'Cap' }); }
+    if (item.narr) { audio.push({ f: item.narr.f, at: T + 0.2, d: item.narr.d }); subs.push({ a: T + 0.2, b: T + 0.2 + item.narr.d, text: item.narr.text, style: 'Cap' }); }
     subs.push({ a: T, b: T + hold, text: sc.title, style: 'Title' });
     T += hold;
     const sceneStart = T;
@@ -264,12 +276,12 @@ async function main() {
       }
       if (s.speed === 1) {
         for (const i of tl.injects) if (i.t >= s.a - 1 && i.t < s.b) {
-          audio.push({ f: i.wav, at: T + (i.t - s.a) / 1000 });
+          audio.push({ f: i.wav, at: T + (i.t - s.a) / 1000, d: i.dur });
           subs.push({ a: T + (i.t - s.a) / 1000, b: T + (i.t - s.a) / 1000 + i.dur, text: `🎙  “${i.text}”`, style: 'You' });
         }
         for (const an of answers) if (an.rt >= s.a && an.rt < s.b) {
           audio.push({ f: join(REC, '..', '..', '..', 'sounds', 'radio_open.wav'), at: T + (an.rt - s.a) / 1000 - 0.2 });
-          audio.push({ f: an.f, at: T + (an.rt - s.a) / 1000 });
+          audio.push({ f: an.f, at: T + (an.rt - s.a) / 1000, d: an.d });
           subs.push({ a: T + (an.rt - s.a) / 1000, b: T + (an.rt - s.a) / 1000 + an.d, text: `🔊  ${an.text}`, style: 'Boss' });
         }
       }

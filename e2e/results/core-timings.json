@@ -1,17 +1,41 @@
 {
-  "at": "2026-11-22T06:18:47.662Z",
+  "at": "2026-11-22T07:03:12.961Z",
   "timings": [
     {
       "label": "Boss cold start (tmux + Claude Code + channel connected)",
-      "ms": 4075
+      "ms": 4102
+    },
+    {
+      "label": "ambiguous utterance → question card",
+      "ms": 7843
+    },
+    {
+      "label": "answer → landed",
+      "ms": 4048
     },
     {
       "label": "utterance → landed in worker (explicit)",
-      "ms": 6028
+      "ms": 6312
     },
     {
       "label": "utterance → spoken report back",
-      "ms": 13616
+      "ms": 16026
+    },
+    {
+      "label": "utterance → landed (inferred, through the confirm window)",
+      "ms": 8759
+    },
+    {
+      "label": "Russian utterance → landed",
+      "ms": 5152
+    },
+    {
+      "label": "status question → spoken answer",
+      "ms": 5758
+    },
+    {
+      "label": "Boss restart",
+      "ms": 2464
     }
   ]
 }

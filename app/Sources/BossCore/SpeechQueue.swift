@@ -12,6 +12,14 @@ public struct SpeechItem: Equatable, Sendable, Codable {
         self.id = id; self.text = text; self.lang = lang; self.priority = priority; self.questionID = questionID
     }
 
+    /// Text as a voice should read it: the macOS Russian voice says "backslash" for « », so quote
+    /// marks and backslashes are dropped (found in a real run).
+    public static func speakable(_ text: String) -> String {
+        var t = text
+        for ch in ["«", "»", "„", "“", "”", "\\"] { t = t.replacingOccurrences(of: ch, with: "") }
+        return t.split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
+    }
+
     public static func format(session: String?, text: String) -> String {
         guard let s = session?.trimmingCharacters(in: .whitespaces), !s.isEmpty, s.lowercased() != "boss" else { return text }
         if text.lowercased().hasPrefix(s.lowercased() + ":") { return text }

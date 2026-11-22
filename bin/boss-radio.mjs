@@ -9,7 +9,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, dirname } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HOME = process.env.BOSS_HOME ?? join(homedir(), 'Boss');
@@ -88,7 +88,14 @@ function sendTelegram(path, caption) {
   if (!j.ok) throw new Error(`telegram refused: ${(r.stdout || r.stderr).slice(0, 200)}`);
 }
 
-export async function radio({ hours, dry = process.env.BOSS_RADIO_DRY === '1', now = new Date() } = {}) {
+/** Telegram only from the real install (same rule as the app): never from a test, demo or sandbox. */
+export function sendAllowed(env = process.env, home = HOME) {
+  if (env.BOSS_RADIO_DRY === '1' || env.BOSS_NO_TELEGRAM === '1' || env.BOSS_DEBUG_CONTROL === '1') return false;
+  return resolve(home) === resolve(join(homedir(), 'Boss'));
+}
+
+export async function radio({ hours, dry = !sendAllowed(), now = new Date() } = {}) {
+  if (!sendAllowed()) dry = true;
   const st = join(HOME, 'state');
   const lastFile = join(st, 'radio-last.json');
   const last = existsSync(lastFile) ? Date.parse(JSON.parse(readFileSync(lastFile, 'utf8')).at) : 0;
@@ -111,6 +118,6 @@ export async function radio({ hours, dry = process.env.BOSS_RADIO_DRY === '1', n
 if (process.argv[1]?.endsWith('boss-radio.mjs')) {
   const args = process.argv.slice(2);
   const hi = args.indexOf('--hours');
-  radio({ hours: hi >= 0 ? Number(args[hi + 1]) : undefined, dry: args.includes('--dry') || process.env.BOSS_RADIO_DRY === '1' })
+  radio({ hours: hi >= 0 ? Number(args[hi + 1]) : undefined, dry: args.includes('--dry') || !sendAllowed() })
     .then((r) => console.log(JSON.stringify(r)), (e) => { console.error(`boss-radio: ${e.message}`); process.exit(1); });
 }
