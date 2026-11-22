@@ -35,7 +35,7 @@ for l in whisper tts up; do plutil -lint "$LAUNCH_DIR/com.roman.boss.$l.plist" >
 grep -q "127.0.0.1" "$LAUNCH_DIR/com.roman.boss.whisper.plist" || fail "whisper must bind loopback"
 grep -q "bootstrap" "$T/launchctl.calls" || fail "launchctl not called"
 # The sandbox's supervisor must not address the real Boss's tmux socket.
-BOSS_HOME="$BOSS_HOME" node "$BOSS_HOME/bin/boss-up.mjs" status | grep -q '"socket":"boss-' || fail "sandbox shares the real tmux socket"
+BOSS_HOME="$BOSS_HOME" BOSS_PORT=1 node "$BOSS_HOME/bin/boss-up.mjs" status | grep -q '"socket":"boss-' || fail "sandbox shares the real tmux socket"
 
 PATH="$T/shim:$PATH" sh "$REPO/install/uninstall.sh" > /dev/null
 cmp -s "$CLAUDE_DIR/CLAUDE.md" "$T/md.orig" || fail "CLAUDE.md not restored byte for byte"
