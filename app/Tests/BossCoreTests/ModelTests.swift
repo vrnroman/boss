@@ -364,3 +364,12 @@ struct TelegramGuardTests {
         #expect(!TelegramFallback.allowed(env: ["BOSS_HOME": "/var/folders/x/boss-app-e2e-1/home"], defaultHome: home))
     }
 }
+
+@Suite("Speakable text")
+struct SpeakableTests {
+    @Test func quotesAndBackslashesAreNotRead() {
+        #expect(SpeechItem.speakable("site: заголовок «Деньги за секунды»") == "site: заголовок Деньги за секунды")
+        #expect(SpeechItem.speakable("a \\ b “c”") == "a b c")
+        #expect(SpeechItem.speakable("plain text") == "plain text")
+    }
+}

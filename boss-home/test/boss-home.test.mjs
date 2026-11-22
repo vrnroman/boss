@@ -6,7 +6,8 @@ import { join } from 'node:path';
 
 const HOME = join(import.meta.dirname, '..');
 const settings = JSON.parse(readFileSync(join(HOME, '.claude', 'settings.json'), 'utf8'));
-const guard = (input, env = {}) => execFileSync(process.execPath, [join(HOME, '.claude', 'guard-send.mjs')], { input: JSON.stringify(input), env: { ...process.env, ...env }, encoding: 'utf8' });
+const LOGHOME = (await import('node:fs')).mkdtempSync(join((await import('node:os')).tmpdir(), 'guard-test-'));
+const guard = (input, env = {}) => execFileSync(process.execPath, [join(HOME, '.claude', 'guard-send.mjs')], { input: JSON.stringify(input), env: { ...process.env, BOSS_HOME: LOGHOME, ...env }, encoding: 'utf8' });
 const denied = (out) => out.trim() !== '' && JSON.parse(out).hookSpecificOutput.permissionDecision === 'deny';
 
 test('every tool the channel offers is allowed for Boss (a missing one is silently denied in dontAsk mode)', async () => {
