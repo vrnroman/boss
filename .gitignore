@@ -1,0 +1,8 @@
+node_modules/
+.build/
+app/.build/
+build/
+*.log
+e2e/results/*.wav
+.DS_Store
+.backself/demo/out/
