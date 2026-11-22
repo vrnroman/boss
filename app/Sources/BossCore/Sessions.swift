@@ -141,6 +141,12 @@ public struct TowerRow: Equatable, Sendable, Codable, Identifiable {
 }
 
 public enum Tower {
+    /// Before the channel answers: the project folder as the name (no numbering yet).
+    public static func folderName(_ s: SessionInfo) -> String? {
+        let f = s.cwdBase.lowercased()
+        return f.isEmpty || f == s.name.lowercased() ? nil : f
+    }
+
     /// Shorten a report to one line for the tower.
     public static func short(_ s: String, max: Int = 80) -> String {
         let first = s.split(whereSeparator: { $0 == "\n" }).first.map(String.init) ?? s
@@ -170,7 +176,7 @@ public enum Tower {
                             waitSeconds: wait, waitText: wait.map(shortDuration), questionID: q?.questionID,
                             detail: q.map { $0.question } ?? state?.reports[s.name].map { short($0.text) },
                             trust: trust, graduated: state?.ledger[s.name]?.graduated ?? false,
-                            nickname: state?.nicknames[s.name])
+                            nickname: state?.display[s.name] ?? state?.nicknames[s.name] ?? Tower.folderName(s))
         }
         rows.sort { a, b in
             if a.group != b.group { return a.group < b.group }

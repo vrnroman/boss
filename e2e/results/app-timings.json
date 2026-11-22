@@ -1,30 +1,30 @@
 {
-  "at": "2026-11-22T09:38:37.084Z",
+  "at": "2026-11-22T11:18:54.441Z",
   "timings": [
     {
       "label": "ambiguous: end of speech → question card",
-      "ms": 10784
+      "ms": 6706
     },
     {
       "label": "spoken answer → original words landed",
-      "ms": 5529
+      "ms": 5472
     },
     {
       "label": "end of speech → landed in worker (whisper + Boss + SendMessage)",
-      "ms": 4221,
-      "whisper_ms": 1939
+      "ms": 4710,
+      "whisper_ms": 2129
     },
     {
       "label": "end of speech → report spoken back",
-      "ms": 14345
+      "ms": 13153
     },
     {
       "label": "Russian: end of speech → landed",
-      "ms": 4537
+      "ms": 4502
     },
     {
       "label": "Boss restart → queued utterance delivered",
-      "ms": 9029
+      "ms": 5425
     }
   ],
   "appExit": null

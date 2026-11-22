@@ -183,9 +183,9 @@ export class Channel {
       .filter((x) => x.name && !this.isSelf(x.name) && allowed(this.allow, x.name))
       .slice(0, 30)
       .map((x) => {
-        const nick = this.nicknamesBySession()[x.name];
+        const shown = this.displayNames()[x.name];
         const topic = this.recentTopic(x.sessionId, x.cwd);
-        return `${nick ? `${nick} = ` : ''}${x.name} (${x.cwd.split('/').filter(Boolean).pop() ?? '-'}, ${x.status || '?'}${topic ? `; recently: ${topic}` : ''})`;
+        return `${shown && shown !== x.name ? `${shown} = ` : ''}${x.name} (${x.cwd.split('/').filter(Boolean).pop() ?? '-'}, ${x.status || '?'}${topic ? `; recently: ${topic}` : ''})`;
       });
     const last = [...this.state.routes].reverse().find((r) => r.sent_at);
     const age = last?.sent_at ? Math.round((this.state.now() - last.sent_at) / 1000) : undefined;
@@ -216,6 +216,32 @@ export class Channel {
     return out;
   }
 
+  /**
+   * The name Roman sees and says: his nickname if he gave one, else the project folder ("boss",
+   * "school-condo"), numbered only when several sessions share it ("boss", "boss 2").
+   */
+  displayNames(): Record<string, string> {
+    const nick = this.nicknamesBySession();
+    const base = (x: { name: string; cwd: string }) => nick[x.name] ?? ((x.cwd.split('/').filter(Boolean).pop() ?? x.name).toLowerCase());
+    const groups = new Map<string, string[]>();
+    for (const x of [...this.lastSessions].sort((a, b) => a.name.localeCompare(b.name))) {
+      const b = base(x);
+      groups.set(b, [...(groups.get(b) ?? []), x.name]);
+    }
+    const out: Record<string, string> = {};
+    for (const [b, names] of groups) names.forEach((n, i) => { out[n] = i === 0 ? b : `${b} ${i + 1}`; });
+    return out;
+  }
+
+  /** A spoken name (display name, nickname or real name) -> the real session name, if any. */
+  resolveSpoken(spoken: string): string | undefined {
+    const l = spoken.trim().toLowerCase();
+    const disp = this.displayNames();
+    return this.lastSessions.find((x) => x.name.toLowerCase() === l)?.name
+      ?? Object.keys(disp).find((n) => disp[n].toLowerCase() === l)
+      ?? this.resolveNicknames()[Channel.cleanNickname(spoken)];
+  }
+
   /** session name -> nickname, for the panel. */
   nicknamesBySession(): Record<string, string> {
     const out: Record<string, string> = {};
@@ -223,19 +249,20 @@ export class Channel {
     return out;
   }
 
-  /** A routing question's choices must be session names: map folder names (a real Haiku slip) to them. */
+  /** A routing question's choices are sessions: whatever Boss wrote (real name, folder, nickname) becomes the shown name. */
   normalizeChoices(choices: string[]): string[] {
     if (!this.lastSessions.length) return choices;
     const base = (p: string) => (p.split('/').filter(Boolean).pop() ?? '').toLowerCase();
     const out: string[] = [];
     for (const c of choices) {
       const l = c.toLowerCase();
-      const viaNick = this.resolveNicknames()[Channel.cleanNickname(c)];
+      const viaNick = this.resolveSpoken(c);
       const hit = this.lastSessions.find((x) => x.name.toLowerCase() === l)
         ?? (viaNick ? this.lastSessions.find((x) => x.name === viaNick) : undefined)
         ?? this.lastSessions.find((x) => base(x.cwd) === l)
         ?? this.lastSessions.find((x) => base(x.cwd).includes(l) || l.includes(base(x.cwd)));
-      const v = hit ? hit.name : c;
+      // Buttons show the name Roman knows (folder or nickname); the answer is mapped back in /answer.
+      const v = hit ? (this.displayNames()[hit.name] ?? hit.name) : c;
       if (!out.includes(v)) out.push(v);
     }
     return out;
@@ -279,6 +306,7 @@ export class Channel {
       ledger: this.state.ledgerView(),
       settings: { humor: this.humor, allow: this.allow },
       nicknames: this.nicknamesBySession(),
+      display: this.displayNames(),
     };
   }
 
@@ -376,7 +404,7 @@ export class Channel {
       inputSchema: { type: 'object', properties: { session: { type: 'string', description: 'real session name, or its current nickname' }, nickname: { type: 'string' } }, required: ['session', 'nickname'] },
       handler: (a) => {
         const raw = str(a.session, 100).trim();
-        const name = this.resolveNicknames()[Channel.cleanNickname(raw)] ?? raw;
+        const name = this.resolveSpoken(raw) ?? raw;
         const live = this.lastSessions.find((x) => x.name === name);
         if (!live) throw new ToolError(`no live session named "${raw}"`);
         const nick = Channel.cleanNickname(str(a.nickname, 60));
@@ -502,7 +530,8 @@ export class Channel {
           if (!q) return this.send(res, 404, { error: 'no such pending question' });
           s.bump(q.about_id ? 'routing_question' : 'worker_question', 'answered');
           const original = q.about_id ? s.utterances.find((u) => u.id === q.about_id)?.text : undefined;
-          this.push(text, { kind: 'answer', question_id: q.question_id, about_id: q.about_id, session: q.session, question: q.question.slice(0, 300), original: original?.slice(0, 4000) });
+          const chosen = q.about_id ? this.resolveSpoken(text) : undefined;
+          this.push(text, { kind: 'answer', question_id: q.question_id, about_id: q.about_id, session: q.session, question: q.question.slice(0, 300), original: original?.slice(0, 4000), chosen });
           return this.send(res, 202, { ok: true });
         }
         case 'POST /undo': {

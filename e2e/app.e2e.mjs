@@ -126,7 +126,7 @@ test('ambiguous: Boss asks out loud, the mic window opens, a spoken "beta" answe
   assert.equal(r.ok, true);
   const q = await poll(async () => (await cards()).find((c) => c.kind === 'question' && !c.answered && c.choices.length >= 2), 60_000, 'question card');
   record('ambiguous: end of speech → question card', Date.now() - t0);
-  assert.deepEqual([...q.choices].sort(), ['bt-alpha', 'bt-beta']);
+  assert.deepEqual([...q.choices].sort(), ['alpha-calc', 'beta-docs']);
   assert.ok((await spoken()).some((s) => s.priority === 'question'), 'the question was spoken');
   const win = await poll(async () => (await app('GET', '/status')).json.answer_window, 15_000, 'answer window open');
   assert.equal(win.question_id, q.questionID);
@@ -156,7 +156,7 @@ test('spoken English: transcribed, routed to the named worker, the work happens,
   record('end of speech → landed in worker (whisper + Boss + SendMessage)', Date.now() - t0, { whisper_ms: tStt });
   assert.equal(card.target, 'bt-alpha');
   await poll(async () => transcript('bt-alpha').includes('mango.txt'), 15_000, 'words in bt-alpha transcript');
-  const said = await poll(async () => (await spoken()).find((s) => /bt-alpha/i.test(s.text) && /mango/i.test(s.text)), 150_000, 'spoken report');
+  const said = await poll(async () => (await spoken()).find((s) => /bt-alpha|alpha-calc/i.test(s.text) && /mango/i.test(s.text)), 150_000, 'spoken report');
   record('end of speech → report spoken back', Date.now() - t0);
   assert.equal(readFileSync(join(W.alpha, 'mango.txt'), 'utf8').trim().toLowerCase(), 'mango');
   assert.ok(!existsSync(join(W.beta, 'mango.txt')));
@@ -180,7 +180,7 @@ test('spoken Russian: transcribed in Russian, routed by the Russian name, report
   const fruitFile = () => readdirSync(W.beta).filter((f) => f !== 'README.md').find((f) => /вишн/i.test(readFileSync(join(W.beta, f), 'utf8')));
   const f = await poll(async () => fruitFile(), 150_000, 'a new file in beta containing вишня');
   assert.ok(f);
-  const said = await poll(async () => (await spoken()).find((s) => /bt-beta/i.test(s.text) && /[а-яё]/i.test(s.text) && s.priority !== 'question' && new Date(s.at).getTime() >= t0), 150_000, 'Russian report');
+  const said = await poll(async () => (await spoken()).find((s) => /bt-beta|beta-docs/i.test(s.text) && /[а-яё]/i.test(s.text) && s.priority !== 'question' && new Date(s.at).getTime() >= t0), 150_000, 'Russian report');
   assert.equal(said.lang, 'ru');
   assert.match(said.text, /[а-яё]/i);
   assert.ok(since);

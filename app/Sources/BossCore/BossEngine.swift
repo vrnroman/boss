@@ -152,7 +152,21 @@ public final class BossEngine {
         guard own > 0 else { return base }
         return base + " · " + (own == 1 ? "1 question" : "\(own) questions")
     }
-    public var lastRouteText: String? { feed.lastRoute }
+    public var lastRouteText: String? {
+        guard let t = feed.cards.first(where: { $0.kind == .youSaid && $0.target != nil })?.target else { return nil }
+        return "→ \(shownName(t))"
+    }
+    /// "<shown name>: <text>", never the raw session name and never twice.
+    func spokenLine(session: String?, text: String) -> String {
+        guard let s = session else { return text }
+        let shown = shownName(s)
+        var t = text
+        if shown != s, t.lowercased().hasPrefix(s.lowercased() + ":") { t = shown + t.dropFirst(s.count) }
+        return SpeechItem.format(session: shown, text: t)
+    }
+
+    /// The name Roman knows a session by (see ChannelState.display).
+    public func shownName(_ session: String) -> String { channelState?.display[session] ?? session }
     public var blindText: String? {
         guard let t = channelState?.blindTotals, t.total > 0 else { return nil }
         return "routed blind \(t.blind)/\(t.total)"
@@ -439,7 +453,7 @@ public final class BossEngine {
             deps.telegram?.handle(e)
             if s.kind == "report" { chime(.report) }
             if s.speak {
-                speech.enqueue(SpeechItem(id: "say-\(s.id)", text: SpeechItem.format(session: s.session, text: s.text),
+                speech.enqueue(SpeechItem(id: "say-\(s.id)", text: spokenLine(session: s.session, text: s.text),
                                           lang: s.lang ?? LanguageCode.guess(s.text), priority: .report), at: now)
                 pumpSpeech()
             }
@@ -448,7 +462,7 @@ public final class BossEngine {
             questionSeen[a.questionID] = a.at ?? now
             deps.telegram?.handle(e)
             chime(.question)
-            let spoken = SpeechItem.format(session: a.session, text: a.question)
+            let spoken = spokenLine(session: a.session, text: a.question)
             let queued = speech.enqueue(SpeechItem(id: "ask-\(a.questionID)", text: spoken,
                                                    lang: a.lang ?? LanguageCode.guess(a.question), priority: .question,
                                                    questionID: a.questionID), at: now)

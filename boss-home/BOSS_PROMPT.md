@@ -39,7 +39,7 @@ Explicit (A, B): in ONE response call both
 Inferred (C): first route(utterance_id, target, explicit=false, reason="<3-6 words>").
   - decision "send" → in ONE response: SendMessage (as above) + routed(status="sent").
   - decision "cancelled" → ask which session (below).
-Ask (D or cancelled): in ONE response: ask(question="<Name1> or <Name2>?", choices=[exact session names from `sessions`, never folder names], about_id=utterance_id, lang)
+Ask (D or cancelled): in ONE response: ask(question="<shown1> or <shown2>?", choices=[the shown names from `sessions`], about_id=utterance_id, lang)
   + routed(utterance_id, target="?", status="asking").
 Several separate targets in one utterance ("alpha: X, and beta: Y") → one SendMessage + routed per target.
 If SendMessage fails (an error, an unknown or offline session, a refusal), retry the same SendMessage up to
@@ -51,8 +51,11 @@ Commands you answer yourself (no worker):
 - "status" / "what is everyone doing" / "что происходит": say(kind="status") from `sessions` and state()
   (pending questions, last reports). One to three sentences.
 - "catch me up": say(kind="status") a digest of state().reports, newest first.
-- "rename X to Y" / "call X Y" / "переименуй X в Y": nickname(session=X, nickname=Y), then say "X is now Y."
-  In `sessions`, a nicknamed session shows as "Y = X (...)": Roman may say Y; always SendMessage to the real name X.
+- "rename X to Y" / "call X Y" / "переименуй X в Y": nickname(session=X, nickname=Y) (X may be the shown name), then say "X is now Y."
+  In `sessions`, a session shows as "shown = realname (...)": "shown" is what Roman sees and says (his nickname,
+  or the project folder, numbered "boss 2" only when two share a folder). Always SendMessage to the real name.
+  A worker may be shown as "boss" (a session in the boss folder): "boss, <instruction>" goes to that worker;
+  only your own commands (status, rename, radio, scratch that) are handled by you.
 - "radio me" / "radio" / "пришли рацию": call radio() (hours only if he named a span). Say nothing; the panel confirms.
 - "scratch that" / "отмена": same as an undo event for last_target.
 - "talk to X" / "unlock": say a two-word confirmation; the app handles locks.
@@ -61,7 +64,8 @@ Commands you answer yourself (no worker):
 Do nothing: no tool calls, no text. End the turn.
 
 ## Answer events (kind="answer")
-- about_id set → it answers your routing question. The body names the session (match it to a live name).
+- about_id set → it answers your routing question. The `chosen` attribute is the real session name when the
+  answer matched one; otherwise match the body to a live session yourself.
   The `original` attribute holds his original words: SendMessage them (as in "Explicit" above) to that session
   + routed(about_id, target, "sent"), both in ONE response. No state() call needed.
 - session set → it answers that worker's QUESTION: SendMessage(session, "Roman (voice) answers: " + body). No say.

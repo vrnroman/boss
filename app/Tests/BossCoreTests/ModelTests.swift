@@ -383,6 +383,20 @@ struct NicknameTests {
         let s = [SessionInfo(pid: 1, cwd: "/w/reelshow", name: "reelshow-9d"), SessionInfo(pid: 2, cwd: "/w/guard", name: "guard-29")]
         let rows = Tower.rows(sessions: s, state: st, now: Date())
         #expect(rows.first { $0.name == "reelshow-9d" }?.nickname == "reels")
-        #expect(rows.first { $0.name == "guard-29" }?.nickname == nil)
+        #expect(rows.first { $0.name == "guard-29" }?.nickname == "guard")   // folder name until the channel answers
+    }
+}
+
+@Suite("Spoken names")
+@MainActor
+struct SpokenNameTests {
+    @Test func reportsAreSpokenWithTheShownNameOnce() async {
+        let rig = Rig()
+        rig.channel.state.value = ChannelState.decode(Data(#"{"display":{"bt-alpha":"alpha-calc"}}"#.utf8))
+        await rig.engine.refreshState()
+        #expect(rig.engine.spokenLine(session: "bt-alpha", text: "bt-alpha: done") == "alpha-calc: done")
+        #expect(rig.engine.spokenLine(session: "bt-alpha", text: "alpha-calc: done") == "alpha-calc: done")
+        #expect(rig.engine.spokenLine(session: "bt-alpha", text: "done") == "alpha-calc: done")
+        #expect(rig.engine.spokenLine(session: nil, text: "status") == "status")
     }
 }
