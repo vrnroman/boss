@@ -95,9 +95,12 @@ if [ "$APP" = 1 ]; then
   if [ -f "$KC" ]; then
     security unlock-keychain -p "$(cat "$BOSS_HOME/signing/keychain.pass")" "$KC"
     ID="$(security find-identity -p codesigning "$KC" | awk '/1\)/{print $2; exit}')"
-    ENT="$REPO/app/Boss.entitlements"
+    ENT="$REPO/app/build/Boss.entitlements"
     if [ -f "$ENT" ]; then codesign -f -s "$ID" --keychain "$KC" --entitlements "$ENT" -o runtime "$APP_DIR/Boss.app" 2>/dev/null
     else codesign -f -s "$ID" --keychain "$KC" -o runtime "$APP_DIR/Boss.app" 2>/dev/null; fi
+    # Hardened runtime blocks the microphone silently unless the entitlement is there: check it.
+    codesign -d --entitlements - "$APP_DIR/Boss.app" 2>/dev/null | grep -q "com.apple.security.device.audio-input" \
+      || fail "Boss.app is missing the microphone entitlement"
     say "Boss.app signed with the local identity (permission grants survive rebuilds)"
   fi
 fi

@@ -201,9 +201,11 @@ public final class BossEngine {
     }
 
     func micProblemText() -> String {
-        deps.recorder.permission == "denied"
-            ? "Microphone access is off. Allow Boss in System Settings › Privacy & Security › Microphone."
-            : "Microphone unavailable. Boss could not start recording."
+        switch deps.recorder.permission {
+        case "denied": return "Microphone access is off. Allow Boss in System Settings › Privacy & Security › Microphone."
+        case "undetermined": return "Allow the microphone in the macOS prompt, then hold to talk again."
+        default: return "Microphone unavailable. Boss could not start recording."
+        }
     }
 
     /// Ends the recording and sends it. Returns the utterance id if something was queued.
