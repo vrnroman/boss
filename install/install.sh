@@ -24,6 +24,20 @@ say() { printf '%s\n' "boss-install: $*"; }
 fail() { printf '%s\n' "boss-install: $*" >&2; exit 1; }
 
 # ---------- preflight ----------
+# Missing Homebrew tools are installed (no admin needed once Homebrew exists).
+BREW="$(command -v brew || echo /opt/homebrew/bin/brew)"
+need=""
+command -v node >/dev/null 2>&1 || [ -x /opt/homebrew/bin/node ] || need="$need node"
+command -v tmux >/dev/null 2>&1 || [ -x /opt/homebrew/bin/tmux ] || need="$need tmux"
+command -v whisper-server >/dev/null 2>&1 || [ -x /opt/homebrew/bin/whisper-server ] || need="$need whisper-cpp"
+command -v ffmpeg >/dev/null 2>&1 || [ -x /opt/homebrew/bin/ffmpeg ] || need="$need ffmpeg"
+if [ -n "$need" ]; then
+  [ -x "$BREW" ] || fail "missing:$need. Install Homebrew (https://brew.sh) or these tools, then run again."
+  say "installing with Homebrew:$need"
+  "$BREW" install $need >/dev/null
+  NODE="$(command -v node || echo /opt/homebrew/bin/node)"
+fi
+command -v swift >/dev/null 2>&1 || fail "Swift is missing: install Apple's Command Line Tools (xcode-select --install), then run again."
 "$NODE" -e 'const [a]=process.versions.node.split(".").map(Number); process.exit(a>=25?0:1)' || fail "node 25+ is required (found $("$NODE" -v))"
 command -v tmux >/dev/null 2>&1 || [ -x /opt/homebrew/bin/tmux ] || fail "tmux is required (brew install tmux)"
 CLAUDE_BIN="$(command -v claude || echo "$HOME/.local/bin/claude")"
@@ -92,17 +106,19 @@ if [ "$APP" = 1 ]; then
   rm -rf "$APP_DIR/Boss.app"
   cp -R "$REPO/app/build/Boss.app" "$APP_DIR/Boss.app"
   KC="$BOSS_HOME/signing/boss-signing.keychain-db"
+  # A local signing identity (created once, no admin) keeps macOS permissions across updates.
+  [ -n "${BOSS_NO_SIGNING:-}" ] || sh "$REPO/install/make-signing.sh" "$BOSS_HOME/signing" >/dev/null || say "could not create a signing identity; using an ad-hoc signature"
   if [ -f "$KC" ]; then
     security unlock-keychain -p "$(cat "$BOSS_HOME/signing/keychain.pass")" "$KC"
     ID="$(security find-identity -p codesigning "$KC" | awk '/1\)/{print $2; exit}')"
     ENT="$REPO/app/build/Boss.entitlements"
     if [ -f "$ENT" ]; then codesign -f -s "$ID" --keychain "$KC" --entitlements "$ENT" -o runtime "$APP_DIR/Boss.app" 2>/dev/null
     else codesign -f -s "$ID" --keychain "$KC" -o runtime "$APP_DIR/Boss.app" 2>/dev/null; fi
-    # Hardened runtime blocks the microphone silently unless the entitlement is there: check it.
-    codesign -d --entitlements - "$APP_DIR/Boss.app" 2>/dev/null | grep -q "com.apple.security.device.audio-input" \
-      || fail "Boss.app is missing the microphone entitlement"
-    say "Boss.app signed with the local identity (permission grants survive rebuilds)"
+    say "Boss.app signed with the local identity (permission grants survive updates)"
   fi
+  # Hardened runtime blocks the microphone silently unless the entitlement is there: check it, always.
+  codesign -d --entitlements - "$APP_DIR/Boss.app" 2>/dev/null | grep -q "com.apple.security.device.audio-input" \
+    || fail "Boss.app is missing the microphone entitlement"
 fi
 
 # ---------- launchd ----------
@@ -159,4 +175,4 @@ keep" true
     BOSS_HOME="$BOSS_HOME" "$NODE" "$BOSS_HOME/bin/boss-up.mjs" restart >/dev/null 2>&1 && say "Boss session restarted on the new code" || say "Boss session will be started by the supervisor"
   fi
 fi
-say "done"
+say "done. Check everything with: sh install/doctor.sh"
