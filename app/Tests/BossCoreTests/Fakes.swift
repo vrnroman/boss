@@ -56,8 +56,17 @@ final class FakeTranscriber: Transcriber, @unchecked Sendable {
 @MainActor final class FakeSpeaker: Speaker {
     var spoken: [String] = []
     var stopped = 0
-    func speak(_ text: String, lang: String?) async { spoken.append(text) }
-    func stop() { stopped += 1 }
+    /// Seconds each utterance takes (0 = instant); stop() ends the current one early.
+    var duration: Double = 0
+    private var cut = false
+    func speak(_ text: String, lang: String?) async {
+        spoken.append(text)
+        guard duration > 0 else { return }
+        cut = false
+        var t = 0.0
+        while t < duration && !cut { try? await Task.sleep(nanoseconds: 10_000_000); t += 0.01 }
+    }
+    func stop() { stopped += 1; cut = true }
 }
 
 @MainActor final class FakeSounds: SoundPlaying {

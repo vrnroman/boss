@@ -95,6 +95,7 @@ public final class BossEngine {
     public private(set) var answerWindow: AnswerWindow?
     /// Debug control only: keep a 6 s answer window even without mic permission (see openAnswerWindow).
     public var allowSilentAnswerWindow = false
+    private var speechToken = 0
     /// The language Roman speaks ("en" | "ru"), shown and switched in the panel.
     public var language: String = "en" {
         didSet { if deps.settings.languageLock != language { deps.settings.languageLock = language } }
@@ -171,7 +172,7 @@ public final class BossEngine {
             case .talkStart: beginTalk(source: .hotkey)
             case .talkEnd:
                 let finished = finishRecording()   // stop the mic right at release
-                task = Task { await self.send(finished) }
+                task = Task { let id = await self.send(finished); self.resumeSpeechAfterTalk(); return id }
             case .cancel: cancelTalk()
             case .armed, .tap, .doubleTap: break   // doubleTap reserved for M3 hands-free
             }
@@ -200,6 +201,13 @@ public final class BossEngine {
         lastVoiceAt = nil
         previewTarget = nil
         speech.paused = true
+        if speaking {
+            // Roman talks over Boss: stop now, say it again after his command is sent.
+            speechToken += 1
+            deps.speaker.stop()
+            speech.interruptCurrent()
+            speaking = false
+        }
         if deps.settings.radioSounds && source != .answerWindow { deps.sounds.play(.start) }
         return true
     }
@@ -215,7 +223,22 @@ public final class BossEngine {
     /// Ends the recording and sends it. Returns the utterance id if something was queued.
     @discardableResult
     public func endTalk() async -> String? {
-        await send(finishRecording())
+        let id = await send(finishRecording())
+        resumeSpeechAfterTalk()
+        return id
+    }
+
+    /// After Roman's command is sent (or dropped): play what was waiting, including anything he cut off.
+    func resumeSpeechAfterTalk() {
+        guard recording == nil else { return }
+        speech.paused = false
+        pumpSpeech()
+    }
+
+    /// Chimes never play over Roman's voice; the spoken item that follows carries the news.
+    func chime(_ cue: SoundCue) {
+        guard recording == nil else { return }
+        deps.sounds.playIf(deps.settings.radioSounds, cue)
     }
 
     /// Stops the mic synchronously and returns what was captured.
@@ -227,8 +250,7 @@ public final class BossEngine {
         if r.questionID != nil { answerWindow = nil }
         previewTarget = nil
         if deps.settings.radioSounds && r.source != .answerWindow { deps.sounds.play(.stop) }
-        speech.paused = false
-        pumpSpeech()
+        // Speech stays paused until his command has gone out (see endTalk): his words first.
         return (r, samples)
     }
 
@@ -415,7 +437,7 @@ public final class BossEngine {
         switch e {
         case .say(let s):
             deps.telegram?.handle(e)
-            if s.kind == "report" { deps.sounds.playIf(deps.settings.radioSounds, .report) }
+            if s.kind == "report" { chime(.report) }
             if s.speak {
                 speech.enqueue(SpeechItem(id: "say-\(s.id)", text: SpeechItem.format(session: s.session, text: s.text),
                                           lang: s.lang ?? LanguageCode.guess(s.text), priority: .report), at: now)
@@ -425,7 +447,7 @@ public final class BossEngine {
         case .ask(let a):
             questionSeen[a.questionID] = a.at ?? now
             deps.telegram?.handle(e)
-            deps.sounds.playIf(deps.settings.radioSounds, .question)
+            chime(.question)
             let spoken = SpeechItem.format(session: a.session, text: a.question)
             let queued = speech.enqueue(SpeechItem(id: "ask-\(a.questionID)", text: spoken,
                                                    lang: a.lang ?? LanguageCode.guess(a.question), priority: .question,
@@ -433,7 +455,7 @@ public final class BossEngine {
             if queued { pumpSpeech() } else { openAnswerWindow(questionID: a.questionID) } // muted: still listen
             Task { await refreshState() }
         case .routed(let r):
-            if r.status == "failed" { deps.sounds.playIf(deps.settings.radioSounds, .error) }
+            if r.status == "failed" { chime(.error) }
             Task { await refreshState() }
         case .confirm, .boss, .unknown:
             break
@@ -482,8 +504,11 @@ public final class BossEngine {
     func pumpSpeech() {
         guard !speaking, let item = speech.startNext() else { return }
         speaking = true
+        speechToken += 1
+        let token = speechToken
         Task { @MainActor in
             await deps.speaker.speak(item.text, lang: item.lang)
+            guard token == speechToken else { return }   // cut off by Roman: requeued already
             speech.finishCurrent()
             speaking = false
             if let q = item.questionID, feed.card("q-\(q)")?.answered != true {

@@ -70,6 +70,16 @@ public struct SpeechQueue: Sendable {
         return item
     }
 
+    /// Roman started talking over Boss: the item being spoken goes back to the front, to be said again
+    /// in full once his command is sent.
+    @discardableResult
+    public mutating func interruptCurrent() -> SpeechItem? {
+        guard let c = current else { return nil }
+        pending.insert(c, at: 0)
+        current = nil
+        return c
+    }
+
     public mutating func finishCurrent() {
         if let c = current { lastSpoken = c }
         current = nil
