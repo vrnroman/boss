@@ -334,6 +334,19 @@ struct TelegramTests {
         #expect(sent.value[0].hasPrefix("Boss 21:01 SGT: payments:"))
     }
 
+    @Test func infoNoticesNeverReachThePhone() {
+        let sent = Box<[String]>([])
+        let tg = TelegramFallback(away: AwayDetector(idleSeconds: { 9999 })) { t in sent.mutate { $0.append(t) } }
+        let info = ChannelEvent.say(SayEvent(id: "i1", text: "Channel restarted.", links: [], speak: false, session: nil, lang: nil, kind: "info", at: nil))
+        let status = ChannelEvent.say(SayEvent(id: "st1", text: "Two sessions busy.", links: [], speak: true, session: nil, lang: nil, kind: "status", at: nil))
+        let ask = ChannelEvent.ask(AskEvent(questionID: "q1", question: "Payments or gateway?", choices: [], aboutID: nil, session: nil, lang: nil, at: nil))
+        #expect(!tg.handle(info))
+        #expect(tg.handle(status))     // an answer to "status"
+        #expect(tg.handle(say("r1")))  // a report: task done
+        #expect(tg.handle(ask))        // a question for him
+        #expect(sent.value.count == 3)
+    }
+
     @Test func doesNotSendWhenActive() {
         let sent = Box<[String]>([])
         let tg = TelegramFallback(away: AwayDetector(idleSeconds: { 30 })) { t in sent.mutate { $0.append(t) } }
