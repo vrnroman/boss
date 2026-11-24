@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import BossCore
 
-/// The chat window beside the panel. Unlike the panel it can take key focus, so Roman can type;
-/// it never activates Boss, so the app he is in stays in front.
+/// The chat window beside the panel: a normal window, a child of the panel, so the two come
+/// forward and go behind other apps together.
 final class ChatPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
@@ -56,9 +56,17 @@ struct ChatView: View {
 
     var statusColor: Color {
         switch model.status {
-        case "busy": return Palette.speaking
+        case "idle", "": return Palette.idle
         case "waiting", "waiting_input": return Palette.waiting
-        default: return Palette.idle
+        default: return Palette.speaking   // busy, shell (a command running): working
+        }
+    }
+
+    var statusText: String {
+        switch model.status {
+        case "idle", "": return model.status
+        case "waiting", "waiting_input": return "waiting for you"
+        default: return "working"
         }
     }
 
@@ -80,7 +88,7 @@ struct ChatView: View {
             if !model.folder.isEmpty && model.folder != model.shown {
                 Text(model.folder).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
             }
-            Text(model.status == "busy" ? "working" : model.status).font(.system(size: 11)).foregroundStyle(statusColor.opacity(0.9))
+            Text(statusText).font(.system(size: 11)).foregroundStyle(statusColor.opacity(0.9))
             Spacer()
             Button { engine.showSession(model.name) } label: {
                 Image(systemName: "macwindow").font(.system(size: 12)).foregroundStyle(Palette.secondary)
@@ -95,7 +103,7 @@ struct ChatView: View {
     var messages: some View {
         ScrollViewReader { proxy in
             ScrollView(.vertical) {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 10) {   // at most 40 entries: a plain stack scrolls exactly to the bottom
                     if model.missing {
                         Text("No transcript found for this session yet.").font(.system(size: 12)).foregroundStyle(Palette.tertiary).padding(.top, 8)
                     } else if model.entries.isEmpty {
@@ -107,9 +115,9 @@ struct ChatView: View {
                 }
                 .padding(.horizontal, 14).padding(.vertical, 10)
             }
-            .onAppear { proxy.scrollTo("bottom", anchor: .bottom) }
+            .onAppear { DispatchQueue.main.async { proxy.scrollTo("bottom", anchor: .bottom) } }
             .onChange(of: model.entries.last?.id) { _, _ in withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) } }
-            .onChange(of: model.name) { _, _ in proxy.scrollTo("bottom", anchor: .bottom) }
+            .onChange(of: model.name) { _, _ in DispatchQueue.main.async { proxy.scrollTo("bottom", anchor: .bottom) } }
         }
     }
 

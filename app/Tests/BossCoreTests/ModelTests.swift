@@ -25,6 +25,18 @@ struct SessionsTests {
         #expect(p.cwdBase == "payments")
     }
 
+    @Test func headlessClaudeRunsAreNotSessions() {
+        // What `claude -p` writes (seen live 2026-11-24): kind interactive, entrypoint sdk-cli.
+        let d = tempDir()
+        write(d, "1.json", #"{"pid":1,"sessionId":"a","cwd":"/x/reelshow","name":"reelshow-96","status":"busy","kind":"interactive","entrypoint":"cli"}"#)
+        write(d, "2.json", #"{"pid":2,"sessionId":"b","cwd":"/x/reelshow","name":"reelshow-e6","status":"busy","kind":"interactive","entrypoint":"sdk-cli"}"#)
+        write(d, "3.json", #"{"pid":3,"sessionId":"c","cwd":"/x/site","name":"site-1a","status":"busy","kind":"interactive","entrypoint":"sdk-ts"}"#)
+        write(d, "4.json", #"{"pid":4,"sessionId":"d","cwd":"/x/old","name":"old","status":"idle","kind":"interactive"}"#)   // no entrypoint: older Claude Code
+        let s = SessionsStore(dir: d, isAlive: { _ in true }, ttyLookup: { _ in nil }).load()
+        #expect(s.map(\.name) == ["old", "reelshow-96"])
+        #expect(s.first { $0.name == "reelshow-96" }?.entrypoint == "cli")
+    }
+
     @Test func filtersHideBossUnderItsTestNameAndHonourOnly() {
         let s = SessionsStore.fromEnvironment(["BOSS_NAME": "bt-boss", "BOSS_SESSIONS_ONLY": "bt-*, payments"])
         #expect(!s.visible("boss"))
