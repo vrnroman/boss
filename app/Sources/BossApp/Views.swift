@@ -337,7 +337,8 @@ struct TowerView: View {
                     .frame(maxWidth: .infinity, alignment: .leading).padding(10)
             }
             ForEach(Array(engine.tower.enumerated()), id: \.element.id) { i, row in
-                TowerRowView(pos: i + 1, row: row) { engine.showSession(row.name) }
+                TowerRowView(pos: i + 1, row: row, chatOpen: engine.chatSession == row.name,
+                              open: { engine.toggleChat(row.name) }) { engine.showSession(row.name) }
             }
         }
         .padding(4)
@@ -351,6 +352,8 @@ struct TowerView: View {
 struct TowerRowView: View {
     let pos: Int
     let row: TowerRow
+    var chatOpen = false
+    var open: () -> Void = {}
     let show: () -> Void
     @State private var hover = false
 
@@ -401,7 +404,10 @@ struct TowerRowView: View {
         }
         .padding(.horizontal, 6).padding(.vertical, 4)
         .frame(minHeight: 30)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(hover ? 0.05 : 0)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(chatOpen ? Palette.listening.opacity(0.16) : Color.white.opacity(hover ? 0.05 : 0)))
+        .contentShape(Rectangle())
+        .onTapGesture(perform: open)   // the row opens its chat beside the panel; the icon shows the terminal
+        .help("Open the chat")
         .onHover { hover = $0 }
     }
 }
