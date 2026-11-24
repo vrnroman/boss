@@ -77,7 +77,11 @@ public final class TelegramFallback: @unchecked Sendable {
         guard enabled, away.isAway else { return false }
         let key: String
         switch e {
-        case .say(let s): key = "say:" + s.id
+        // Only a report (a task done) or a status answer reaches his phone; "info" notices
+        // (a channel hiccup, a retry) never do (Roman, 2026-11-24: done, answers, questions only).
+        case .say(let s):
+            guard s.kind != "info" else { return false }
+            key = "say:" + s.id
         case .ask(let a): key = "ask:" + a.questionID
         default: return false
         }
