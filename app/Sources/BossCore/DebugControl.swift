@@ -11,7 +11,8 @@ public protocol DebugControlHandler: AnyObject {
     func debugUndo() async -> HTTPResponse
     func debugSpoken() -> HTTPResponse
     func debugStatus() -> HTTPResponse
-    func debugSnapshot(path: String) -> HTTPResponse
+    func debugSnapshot(path: String, window: String) -> HTTPResponse
+    func debugChat(name: String?) -> HTTPResponse
     func debugLanguage(_ code: String) -> HTTPResponse
 }
 
@@ -63,8 +64,15 @@ public struct DebugControlRouter {
             return h.debugLanguage(c)
         case ("POST", "/snapshot"):
             guard let j = r.json(), let p = j["path"] as? String, p.hasSuffix(".png") else { return .error(400, "path (.png) required") }
-            return h.debugSnapshot(path: p)
-        case (_, "/status"), (_, "/feed"), (_, "/sessions"), (_, "/spoken"), (_, "/inject"), (_, "/talk"), (_, "/tap"), (_, "/undo"), (_, "/snapshot"), (_, "/language"):
+            let w = j["window"] as? String ?? "panel"
+            guard ["panel", "chat"].contains(w) else { return .error(400, "window panel|chat") }
+            return h.debugSnapshot(path: p, window: w)
+        case ("POST", "/chat"):
+            // {"name": "<session>"} opens its chat window; {} or {"name": null} closes it.
+            guard let j = r.json() else { return .error(400, "json body required") }
+            if let n = j["name"], !(n is NSNull) && !(n is String) { return .error(400, "name must be a string") }
+            return h.debugChat(name: j["name"] as? String)
+        case (_, "/status"), (_, "/feed"), (_, "/sessions"), (_, "/spoken"), (_, "/inject"), (_, "/talk"), (_, "/tap"), (_, "/undo"), (_, "/snapshot"), (_, "/language"), (_, "/chat"):
             return .error(405, "method not allowed")
         default:
             return .error(404, "not found")

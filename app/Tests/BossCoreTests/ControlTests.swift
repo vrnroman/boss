@@ -62,7 +62,8 @@ struct HTTPParserTests {
     func debugUndo() async -> HTTPResponse { calls.append("undo"); return .json(200, [:]) }
     func debugSpoken() -> HTTPResponse { calls.append("spoken"); return .json(200, [:]) }
     func debugStatus() -> HTTPResponse { calls.append("status"); return .json(200, [:]) }
-    func debugSnapshot(path: String) -> HTTPResponse { calls.append("snapshot:\(path)"); return .json(200, [:]) }
+    func debugSnapshot(path: String, window: String) -> HTTPResponse { calls.append("snapshot:\(window):\(path)"); return .json(200, [:]) }
+    func debugChat(name: String?) -> HTTPResponse { calls.append("chat:\(name ?? "-")"); return .json(200, [:]) }
     func debugLanguage(_ code: String) -> HTTPResponse { calls.append("language:\(code)"); return .json(200, [:]) }
 }
 
@@ -75,7 +76,20 @@ struct DebugRouterTests {
         #expect(await r.route(req("POST", "/snapshot", #"{"path":"/tmp/x.png"}"#)).status == 200)
         #expect(await r.route(req("POST", "/snapshot", #"{"path":"/etc/passwd"}"#)).status == 400)
         #expect(await r.route(req("POST", "/snapshot", #"{"path":"/tmp/x.png"}"#, auth: nil)).status == 403)
-        #expect(h.calls == ["snapshot:/tmp/x.png"])
+        #expect(await r.route(req("POST", "/snapshot", #"{"path":"/tmp/c.png","window":"chat"}"#)).status == 200)
+        #expect(await r.route(req("POST", "/snapshot", #"{"path":"/tmp/c.png","window":"desktop"}"#)).status == 400)
+        #expect(h.calls == ["snapshot:panel:/tmp/x.png", "snapshot:chat:/tmp/c.png"])
+    }
+
+    @Test func chatOpensAndCloses() async {
+        let h = FakeDebugHandler()
+        let r = DebugControlRouter(token: { "secret" }, handler: h)
+        #expect(await r.route(req("POST", "/chat", #"{"name":"payments"}"#)).status == 200)
+        #expect(await r.route(req("POST", "/chat", "{}")).status == 200)
+        #expect(await r.route(req("POST", "/chat", #"{"name":3}"#)).status == 400)
+        #expect(await r.route(req("POST", "/chat", #"{"name":"payments"}"#, auth: nil)).status == 403)
+        #expect(await r.route(req("GET", "/chat")).status == 405)
+        #expect(h.calls == ["chat:payments", "chat:-"])
     }
 
     func req(_ m: String, _ p: String, _ body: String = "", auth: String? = "Bearer secret", origin: String? = nil) -> HTTPRequest {

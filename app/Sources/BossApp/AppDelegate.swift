@@ -23,6 +23,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// False for any test, demo or sandbox instance: those never message the phone.
     var telegramAllowed = false
     var panel: FloatingPanel!
+    var chatPanel: ChatPanel?
+    let chat = ChatModel()
+    static let chatWidth: CGFloat = 700
     var statusItem: NSStatusItem!
     let audio = AudioCapture()
     let preview = LivePreview()
@@ -134,8 +137,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         p.setFrame(NSRect(origin: initialOrigin(size: s), size: s), display: true)
         if showAtLaunch { p.orderFrontRegardless(); engine.panelVisible = true } else { engine.panelVisible = false }
         NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: p, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.saveTopRight() }
+            MainActor.assumeIsolated { self?.saveTopRight(); self?.placeChat() }
         }
+        NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: p, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.placeChat() }
+        }
+        engine.onChatChange = { [weak self] name in self?.showChat(name) }
         NotificationCenter.default.addObserver(forName: NSWindow.didEndLiveResizeNotification, object: p, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, self.engine.panelExpanded else { return }
@@ -165,6 +172,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     func setExpanded(_ e: Bool) {
         engine.panelExpanded = e
+        if !e { engine.closeChat() }
         let s = e ? Self.expandedSize : Self.pillSize
         let f = panel.frame
         // keep the top-right corner fixed, stay on screen
@@ -179,6 +187,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     var statusMenu: NSMenu?
 
+    // MARK: - Chat window
+
+    /// Open the chat for `name` beside the panel, or close it (nil).
+    func showChat(_ name: String?) {
+        guard let name else { chatPanel?.orderOut(nil); return }
+        let row = engine.tower.first { $0.name == name }
+        chat.open(name: name, shown: row?.nickname ?? name, info: engine.sessionInfo(named: name))
+        if chatPanel == nil { chatPanel = makeChatPanel() }
+        placeChat()
+        chatPanel?.alphaValue = 1
+        chatPanel?.orderFrontRegardless()
+    }
+
+    func makeChatPanel() -> ChatPanel {
+        let p = ChatPanel(contentRect: NSRect(x: 0, y: 0, width: Self.chatWidth, height: 520),
+                          styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
+        p.isFloatingPanel = true
+        p.level = .floating
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        p.backgroundColor = .clear
+        p.isOpaque = false
+        p.hasShadow = true
+        p.hidesOnDeactivate = false
+        p.isReleasedWhenClosed = false
+        p.becomesKeyOnlyIfNeeded = true   // key only when Roman clicks into the text field
+        p.title = "Boss chat"
+        let fx = NSVisualEffectView()
+        fx.material = .hudWindow
+        fx.blendingMode = .behindWindow
+        fx.state = .active
+        fx.appearance = NSAppearance(named: .darkAqua)
+        fx.wantsLayer = true
+        fx.layer?.cornerRadius = 16
+        fx.layer?.cornerCurve = .continuous
+        fx.layer?.masksToBounds = true
+        fx.layer?.borderWidth = 0.5
+        fx.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        let host = FirstMouseHostingView(rootView: ChatView(model: chat, engine: engine))
+        host.translatesAutoresizingMaskIntoConstraints = false
+        fx.addSubview(host)
+        NSLayoutConstraint.activate([
+            host.leadingAnchor.constraint(equalTo: fx.leadingAnchor), host.trailingAnchor.constraint(equalTo: fx.trailingAnchor),
+            host.topAnchor.constraint(equalTo: fx.topAnchor), host.bottomAnchor.constraint(equalTo: fx.bottomAnchor),
+        ])
+        p.contentView = fx
+        return p
+    }
+
+    /// Same height as the panel, 700 wide, on whichever side of it has room (right first).
+    func placeChat() {
+        guard let c = chatPanel, engine.chatSession != nil, let p = panel else { return }
+        let vf = (p.screen ?? NSScreen.main)?.visibleFrame ?? .zero
+        c.setFrame(ChatPlacement.frame(panel: p.frame, screen: vf, width: Self.chatWidth), display: true)
+    }
+
     @objc func statusClicked(_ sender: Any?) {
         let ev = NSApp.currentEvent
         if ev?.type == .rightMouseUp || ev?.modifierFlags.contains(.control) == true, let m = statusMenu {
@@ -191,7 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func togglePanel() {
-        if panel.isVisible { panel.orderOut(nil); engine.panelVisible = false }
+        if panel.isVisible { panel.orderOut(nil); engine.panelVisible = false; engine.closeChat() }
         else { panel.orderFrontRegardless(); engine.panelVisible = true }
     }
 
@@ -402,8 +465,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let env = ProcessInfo.processInfo.environment
         guard env["BOSS_DEBUG_CONTROL"] == "1" || settings.debugControl else { return }
         engine.allowSilentAnswerWindow = true
-        engine.snapshotter = { [weak self] path in
-            guard let view = self?.panel.contentView else { return false }
+        engine.snapshotter = { [weak self] path, window in
+            guard let view = (window == "chat" ? self?.chatPanel?.contentView : self?.panel.contentView) else { return false }
             view.layoutSubtreeIfNeeded()
             guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return false }
             view.cacheDisplay(in: view.bounds, to: rep)
@@ -444,16 +507,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             Task { await self.engine.retryTick(now: CACurrentMediaTime()) }
         }
-        every(2) { [weak self] in self?.engine.refreshSessions() }
-        // Out of the way unless in use: 80% transparent when the mouse is not over the panel,
-        // fully visible while hovered, while Roman talks, or while a question waits for him.
+        every(2) { [weak self] in
+            guard let self else { return }
+            self.engine.refreshSessions()
+            if self.engine.chatSession != nil, self.chatPanel?.isVisible == true {
+                self.chat.status = self.engine.sessionInfo(named: self.chat.name)?.status ?? self.chat.status
+                self.chat.reload()
+            }
+        }
+        // Out of the way unless in use: 92% transparent when the mouse is over neither the panel nor
+        // the chat, fully visible while hovered, while Roman types in the chat, while he talks, or
+        // while a question waits for him. Both windows follow the same rule together.
         every(0.2) { [weak self] in
             guard let self, let p = self.panel, p.isVisible else { return }
-            let focused = p.frame.insetBy(dx: -6, dy: -6).contains(NSEvent.mouseLocation)
+            let mouse = NSEvent.mouseLocation
+            let chat = self.chatPanel.flatMap { $0.isVisible ? $0 : nil }
+            let focused = p.frame.insetBy(dx: -6, dy: -6).contains(mouse)
+                || (chat.map { $0.frame.insetBy(dx: -6, dy: -6).contains(mouse) || $0.isKeyWindow } ?? false)
                 || self.engine.recording != nil || self.engine.status == .waiting
-            let target: CGFloat = focused ? 1.0 : 0.20   // 80% transparent when not in use
-            if abs(p.alphaValue - target) > 0.01 {
-                NSAnimationContext.runAnimationGroup { ctx in ctx.duration = 0.18; p.animator().alphaValue = target }
+            let target: CGFloat = focused ? 1.0 : 0.08   // 92% transparent when not in use
+            for w in [p, chat].compactMap({ $0 }) where abs(w.alphaValue - target) > 0.01 {
+                NSAnimationContext.runAnimationGroup { ctx in ctx.duration = 0.18; w.animator().alphaValue = target }
             }
         }
         every(5) { [weak self] in

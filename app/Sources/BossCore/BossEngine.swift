@@ -117,7 +117,8 @@ public final class BossEngine {
         didSet { if deps.settings.languageLock != language { deps.settings.languageLock = language } }
     }
     /// Set by the app: renders the panel's real view hierarchy to a PNG (works with the display asleep).
-    public var snapshotter: ((String) -> Bool)?
+    /// Renders a window to a PNG: (path, "panel" | "chat").
+    public var snapshotter: ((String, String) -> Bool)?
     public var hotkeyActive = false
     public var panelExpanded = false
     public var panelVisible = true
@@ -647,6 +648,44 @@ public final class BossEngine {
         else { feed.addSystem("Cancel failed (\(r)).", level: "error", at: deps.clock(), key: "cancel") }
     }
 
+    /// The session whose chat window is open (its real name), nil when none.
+    public var chatSession: String?
+    /// Opens or closes the chat window beside the panel (set by the app).
+    @ObservationIgnored public var onChatChange: ((String?) -> Void)?
+
+    /// Click on a session: open its chat, or close it when it is already open.
+    public func toggleChat(_ name: String) {
+        chatSession = chatSession == name ? nil : name
+        onChatChange?(chatSession)
+    }
+    public func closeChat() {
+        guard chatSession != nil else { return }
+        chatSession = nil
+        onChatChange?(nil)
+    }
+
+    public func sessionInfo(named name: String) -> SessionInfo? { sessions.first { $0.name == name } }
+
+    /// Text Roman typed in a session's chat window: sent through Boss exactly like an explicit voice
+    /// command ("<shown name>: <text>"), with the same outbox, retries and feed card.
+    @discardableResult
+    public func sendTyped(to shownName: String, text: String) async -> OutboxItem? {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return nil }
+        let id = OutboxID.make(now: deps.clock())
+        let full = "\(shownName): \(t)"
+        do {
+            _ = try deps.outbox.save(id: id, wav: Data(), mode: "talk")
+            _ = try deps.outbox.update(id) { $0.text = full; $0.lang = language; $0.state = .transcribed }
+        } catch {
+            feed.addSystem("Could not save the message (\(error)).", level: "error", at: deps.clock(), key: "typed")
+            return nil
+        }
+        feed.addRecording(utteranceID: id, mode: "talk", answersQuestionID: nil, at: deps.clock())
+        feed.setTranscript(utteranceID: id, text: full, lang: language)
+        return await advance(id)
+    }
+
     public func showSession(_ name: String) {
         let pid = sessions.first { $0.name == name }?.pid
         deps.showSession(name, pid.flatMap { deps.ttyLookup($0) })
@@ -730,9 +769,18 @@ extension BossEngine: DebugControlHandler {
         return .json(200, ["ok": true, "lang": language])
     }
 
-    public func debugSnapshot(path: String) -> HTTPResponse {
+    public func debugSnapshot(path: String, window: String = "panel") -> HTTPResponse {
         guard let s = snapshotter else { return .error(503, "no snapshotter") }
-        return s(path) ? .json(200, ["ok": true, "path": path]) : .error(500, "snapshot failed")
+        return s(path, window) ? .json(200, ["ok": true, "path": path]) : .error(500, "snapshot failed")
+    }
+
+    public func debugChat(name: String?) -> HTTPResponse {
+        if let n = name, !n.isEmpty {
+            guard sessionInfo(named: n) != nil else { return .error(404, "no live session \(n)") }
+            chatSession = n
+            onChatChange?(n)
+        } else { closeChat() }
+        return .json(200, ["ok": true, "chat": chatSession as Any? ?? NSNull()])
     }
 
     public func debugStatus() -> HTTPResponse {
