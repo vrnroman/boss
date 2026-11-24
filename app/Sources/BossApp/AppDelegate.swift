@@ -4,13 +4,19 @@ import CoreGraphics
 import QuartzCore
 import BossCore
 
-/// A floating panel that never takes key focus, so typing stays in whatever app Roman is in.
+/// The Boss panel behaves like any other window (Roman, 2026-11-24): in front while he uses it,
+/// behind whatever he clicks next. No floating, no fading.
 final class FloatingPanel: NSPanel {
-    override var canBecomeKey: Bool { false }
-    override var canBecomeMain: Bool { false }
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
 }
 
 /// Hosting view that reacts to the first click even though its window is never key.
+extension NSWindow {
+    /// This window or one of its children (the chat) is the key window.
+    var isKeyOrChildKey: Bool { isKeyWindow || (childWindows ?? []).contains { $0.isKeyWindow } }
+}
+
 final class FirstMouseHostingView<V: View>: NSHostingView<V> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
@@ -87,20 +93,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func setupPanel() {
         let size = Self.pillSize
         let p = FloatingPanel(contentRect: NSRect(origin: .zero, size: size),
-                              styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView, .resizable], backing: .buffered, defer: false)
+                              styleMask: [.borderless, .fullSizeContentView, .resizable], backing: .buffered, defer: false)
         // Only the height can be dragged; the width stays fixed so the layout holds.
         p.minSize = NSSize(width: Self.panelWidth, height: 240)
         p.maxSize = NSSize(width: Self.panelWidth, height: 4000)
-        p.isFloatingPanel = true
-        p.level = .floating
-        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        p.isFloatingPanel = false
+        p.level = .normal
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.isMovableByWindowBackground = true
         p.backgroundColor = .clear
         p.isOpaque = false
         p.hasShadow = true
         p.hidesOnDeactivate = false
         p.isReleasedWhenClosed = false
-        p.becomesKeyOnlyIfNeeded = true
+        p.becomesKeyOnlyIfNeeded = false
         p.title = "Boss"
 
         let fx = NSVisualEffectView()
@@ -135,7 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         engine.panelExpanded = true
         let s = Self.expandedSize
         p.setFrame(NSRect(origin: initialOrigin(size: s), size: s), display: true)
-        if showAtLaunch { p.orderFrontRegardless(); engine.panelVisible = true } else { engine.panelVisible = false }
+        if showAtLaunch { bringToFront(); engine.panelVisible = true } else { engine.panelVisible = false }
         NotificationCenter.default.addObserver(forName: NSWindow.didMoveNotification, object: p, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.saveTopRight(); self?.placeChat() }
         }
@@ -191,27 +197,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     /// Open the chat for `name` beside the panel, or close it (nil).
     func showChat(_ name: String?) {
-        guard let name else { chatPanel?.orderOut(nil); return }
+        guard let name else {
+            if let c = chatPanel { panel.removeChildWindow(c); c.orderOut(nil) }
+            return
+        }
         let row = engine.tower.first { $0.name == name }
         chat.open(name: name, shown: row?.nickname ?? name, info: engine.sessionInfo(named: name))
         if chatPanel == nil { chatPanel = makeChatPanel() }
+        guard let c = chatPanel else { return }
         placeChat()
-        chatPanel?.alphaValue = 1
-        chatPanel?.orderFrontRegardless()
+        // A child of the panel: they come forward and go behind other apps together.
+        if c.parent == nil { panel.addChildWindow(c, ordered: .above) }
+        NSApp.activate(ignoringOtherApps: true)
+        c.orderFront(nil)
     }
 
     func makeChatPanel() -> ChatPanel {
         let p = ChatPanel(contentRect: NSRect(x: 0, y: 0, width: Self.chatWidth, height: 520),
-                          styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView], backing: .buffered, defer: false)
-        p.isFloatingPanel = true
-        p.level = .floating
-        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+                          styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
+        p.isFloatingPanel = false
+        p.level = .normal
+        p.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         p.backgroundColor = .clear
         p.isOpaque = false
         p.hasShadow = true
         p.hidesOnDeactivate = false
         p.isReleasedWhenClosed = false
-        p.becomesKeyOnlyIfNeeded = true   // key only when Roman clicks into the text field
+        p.becomesKeyOnlyIfNeeded = false
         p.title = "Boss chat"
         let fx = NSVisualEffectView()
         fx.material = .hudWindow
@@ -253,9 +265,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// The ring in the menu bar: Boss in front → hide it; hidden or behind other windows → bring it forward.
     func togglePanel() {
-        if panel.isVisible { panel.orderOut(nil); engine.panelVisible = false; engine.closeChat() }
-        else { panel.orderFrontRegardless(); engine.panelVisible = true }
+        if panel.isVisible && NSApp.isActive && panel.isKeyOrChildKey {
+            panel.orderOut(nil); engine.panelVisible = false; engine.closeChat()
+        } else {
+            bringToFront(); engine.panelVisible = true
+        }
+    }
+
+    func bringToFront() {
+        NSApp.activate(ignoringOtherApps: true)
+        panel.makeKeyAndOrderFront(nil)
     }
 
     // MARK: Status item
@@ -513,21 +534,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             if self.engine.chatSession != nil, self.chatPanel?.isVisible == true {
                 self.chat.status = self.engine.sessionInfo(named: self.chat.name)?.status ?? self.chat.status
                 self.chat.reload()
-            }
-        }
-        // Out of the way unless in use: 92% transparent when the mouse is over neither the panel nor
-        // the chat, fully visible while hovered, while Roman types in the chat, while he talks, or
-        // while a question waits for him. Both windows follow the same rule together.
-        every(0.2) { [weak self] in
-            guard let self, let p = self.panel, p.isVisible else { return }
-            let mouse = NSEvent.mouseLocation
-            let chat = self.chatPanel.flatMap { $0.isVisible ? $0 : nil }
-            let focused = p.frame.insetBy(dx: -6, dy: -6).contains(mouse)
-                || (chat.map { $0.frame.insetBy(dx: -6, dy: -6).contains(mouse) || $0.isKeyWindow } ?? false)
-                || self.engine.recording != nil || self.engine.status == .waiting
-            let target: CGFloat = focused ? 1.0 : 0.08   // 92% transparent when not in use
-            for w in [p, chat].compactMap({ $0 }) where abs(w.alphaValue - target) > 0.01 {
-                NSAnimationContext.runAnimationGroup { ctx in ctx.duration = 0.18; w.animator().alphaValue = target }
             }
         }
         every(5) { [weak self] in

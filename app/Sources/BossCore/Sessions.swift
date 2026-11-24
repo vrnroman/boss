@@ -8,6 +8,9 @@ public struct SessionInfo: Equatable, Sendable, Codable {
     public var name: String
     public var status: String
     public var kind: String
+    /// "cli" for a session in a terminal; "sdk-cli" (and other "sdk-*") for a headless `claude -p`
+    /// run a script started, which writes a session file too but is not a session Roman talks to.
+    public var entrypoint: String = ""
     public var updatedAt: Date?
     public var startedAt: Date?
 
@@ -25,9 +28,16 @@ public struct SessionInfo: Equatable, Sendable, Codable {
         return SessionInfo(pid: pid, sessionId: o["sessionId"] as? String ?? "", cwd: cwd, name: name,
                            status: o["status"] as? String ?? "unknown", kind: o["kind"] as? String ?? "",
                            updatedAt: Timestamp.parse(o["updatedAt"]), startedAt: Timestamp.parse(o["startedAt"]))
+            .with(entrypoint: o["entrypoint"] as? String ?? "")
     }
 
     public var cwdBase: String { (cwd as NSString).lastPathComponent }
+
+    func with(entrypoint e: String) -> SessionInfo { var c = self; c.entrypoint = e; return c }
+
+    /// A headless run (`claude -p`, the Agent SDK): e.g. reelshow's checker agents showed up as
+    /// "reelshow-e6" next to the real reelshow session.
+    public var isHeadless: Bool { entrypoint.hasPrefix("sdk") }
 }
 
 /// Reads live interactive sessions. Filesystem, liveness and tty lookup are injected.
@@ -108,7 +118,7 @@ public struct SessionsStore: Sendable {
         for f in files where f.hasSuffix(".json") {
             guard let d = try? Data(contentsOf: dir.appendingPathComponent(f)),
                   let s = SessionInfo.parse(d) else { continue }
-            guard s.kind == "interactive", visible(s.name), isAlive(s.pid) else { continue }
+            guard s.kind == "interactive", !s.isHeadless, visible(s.name), isAlive(s.pid) else { continue }
             out.append(s)
         }
         return out.sorted { $0.name < $1.name }
