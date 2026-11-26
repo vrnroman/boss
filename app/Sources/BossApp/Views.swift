@@ -40,13 +40,15 @@ struct PanelActions {
 struct RootView: View {
     @Bindable var engine: BossEngine
     let actions: PanelActions
+    var limits: LimitsStore? = nil
+    var onLimitsOpen: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 0) {
             PillView(engine: engine, actions: actions)
             if engine.panelExpanded {
                 Divider().overlay(Color.white.opacity(0.08))
-                ExpandedView(engine: engine, actions: actions)
+                ExpandedView(engine: engine, actions: actions, limits: limits, onLimitsOpen: onLimitsOpen)
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
@@ -198,6 +200,8 @@ struct PillView: View {
 struct ExpandedView: View {
     @Bindable var engine: BossEngine
     let actions: PanelActions
+    var limits: LimitsStore? = nil
+    var onLimitsOpen: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -206,6 +210,7 @@ struct ExpandedView: View {
             TowerView(engine: engine)
             SectionHeader(title: "Feed", trailing: nil)
             FeedView(engine: engine, actions: actions)
+            if let limits { LimitsBar(store: limits, onOpen: onLimitsOpen) }
         }
         .padding(.horizontal, 8)
         .padding(.top, 8)

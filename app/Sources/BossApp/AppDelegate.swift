@@ -39,6 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var debugServer: DebugServer?
     var timers: [Timer] = []
     var lastStatus: AppStatus?
+    var limits: LimitsStore!
     var wasRecording = false
 
     static let pillSize = NSSize(width: 420, height: 48)
@@ -75,6 +76,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             restartBoss: { _ = BossRestarter.restart() })
         engine = BossEngine(deps: deps)
 
+        limits = makeLimits(telegramAllowed: telegramAllowed)
         setupPanel()
         setupStatusItem()
         setupAudio()
@@ -114,7 +116,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             restartBoss: { [weak self] in self?.restartBoss() },
             openURL: { if let u = URL(string: $0) { NSWorkspace.shared.open(u) } },
             systemAction: { [weak self] in self?.systemAction($0) })
-        let host = FirstMouseHostingView(rootView: RootView(engine: engine, actions: actions))
+        let host = FirstMouseHostingView(rootView: RootView(engine: engine, actions: actions, limits: limits,
+                                                                       onLimitsOpen: { [weak self] in self?.refreshLimits(force: true) }))
         host.translatesAutoresizingMaskIntoConstraints = false
         fx.addSubview(host)
         NSLayoutConstraint.activate([
@@ -284,6 +287,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Raise the panel (and the chat with it) above every other app, whether or not macOS lets Boss
     /// become the active app. Roman's first click into it then gives it the keyboard.
     func bringToFront() {
+        refreshLimits(force: true)
         NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
         panel.orderFrontRegardless()
@@ -539,6 +543,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             guard let self else { return }
             Task { await self.engine.retryTick(now: CACurrentMediaTime()) }
         }
+        every(30) { [weak self] in self?.refreshLimits(force: false) }
+        refreshLimits(force: false)
         every(2) { [weak self] in
             guard let self else { return }
             self.engine.refreshSessions()
