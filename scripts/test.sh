@@ -16,7 +16,9 @@ node --test --test-reporter=dot bin/test/*.test.mjs install/test/*.test.mjs boss
 step "tts sidecar gate (unittest)"
 (cd tts && python3 -m unittest -q test_server.py)
 step "app: BossCore (Swift Testing)"
-sh app/scripts/test.sh 2>&1 | tail -1
+# Keep the Swift result: a pipe into tail would hide a failure behind tail's success.
+SWIFT_OUT="$(sh app/scripts/test.sh 2>&1)" || { printf '%s\n' "$SWIFT_OUT" | grep -E "✘|error:" | head -40; echo "Swift tests FAILED"; exit 1; }
+printf '%s\n' "$SWIFT_OUT" | tail -1
 step "installer round trip (sandbox)"
 sh install/test/install.test.sh
 step "dependency audit: zero high/critical"
