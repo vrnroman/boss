@@ -97,7 +97,7 @@ struct ChatView: View {
         VStack(spacing: 0) {
             header
             Divider().overlay(Color.white.opacity(0.08))
-            statusCard.padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 4)
+            statusCard
             content
             Divider().overlay(Color.white.opacity(0.08))
             input
@@ -113,6 +113,9 @@ struct ChatView: View {
                 Text(model.folder).font(.system(size: 11)).foregroundStyle(Palette.tertiary)
             }
             Text(statusText).font(.system(size: 11)).foregroundStyle(statusColor.opacity(0.9))
+            if model.summarizing && model.digest == nil {
+                Text("· summarizing…").font(.system(size: 11)).foregroundStyle(Palette.tertiary)
+            }
             Spacer()
             Button { engine.showSession(model.name) } label: {
                 Image(systemName: "macwindow").font(.system(size: 12)).foregroundStyle(Palette.secondary)
@@ -145,45 +148,35 @@ struct ChatView: View {
             }
             .onAppear { DispatchQueue.main.async { proxy.scrollTo("bottom", anchor: .bottom) } }
             .onChange(of: cards.last?.id) { _, _ in withAnimation(.easeOut(duration: 0.2)) { proxy.scrollTo("bottom", anchor: .bottom) } }
+            .onChange(of: model.digest?.key) { _, _ in DispatchQueue.main.async { proxy.scrollTo("bottom", anchor: .bottom) } }
             .onChange(of: model.name) { _, _ in expanded = []; DispatchQueue.main.async { proxy.scrollTo("bottom", anchor: .bottom) } }
         }
     }
 
+    /// What the session is doing, as short as it gets: shown only once there is a summary, and only
+    /// as tall as its lines (the answers below are what matter).
     @ViewBuilder var statusCard: some View {
-        let d = model.digest
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Text("STATUS").font(.system(size: 10, weight: .semibold)).tracking(0.6).foregroundStyle(Palette.tertiary)
-                if model.summarizing { ProgressView().controlSize(.mini).scaleEffect(0.7) }
-                Spacer()
+        if let d = model.digest, !d.headline.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(d.headline).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white.opacity(0.95))
+                    .lineLimit(2).fixedSize(horizontal: false, vertical: true)
+                ForEach(Array(d.done.suffix(2).enumerated()), id: \.offset) { _, s in planLine("checkmark.circle.fill", Palette.speaking, s, dim: true) }
+                ForEach(Array(d.next.prefix(3).enumerated()), id: \.offset) { _, s in planLine("circle", Palette.waiting, s, dim: false) }
             }
-            if let d, !d.headline.isEmpty {
-                Text(d.headline).font(.system(size: 13.5, weight: .semibold)).foregroundStyle(.white.opacity(0.95))
-                    .fixedSize(horizontal: false, vertical: true)
-                if !d.done.isEmpty || !d.next.isEmpty {
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(Array(d.done.suffix(3).enumerated()), id: \.offset) { _, s in planLine("checkmark.circle.fill", Palette.speaking, s, dim: true) }
-                        ForEach(Array(d.next.prefix(3).enumerated()), id: \.offset) { _, s in planLine("circle", Palette.waiting, s, dim: false) }
-                    }
-                }
-            } else {
-                Text(model.working ? "Working on: \(model.thread.asks.last.map { DigestView.clip($0.text, 90) } ?? "…")"
-                                   : (model.summarizing ? "Summarizing…" : statusText.capitalized))
-                    .font(.system(size: 13)).foregroundStyle(.white.opacity(0.85))
-            }
+            .padding(.horizontal, 12).padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.white.opacity(0.05)))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.white.opacity(0.07)))
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            Divider().overlay(Color.white.opacity(0.06))
         }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .frame(maxHeight: 210, alignment: .top)
-        .clipped()
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.05)))
-        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous).stroke(Color.white.opacity(0.07)))
     }
 
     func planLine(_ icon: String, _ color: Color, _ text: String, dim: Bool) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 7) {
             Image(systemName: icon).font(.system(size: 10)).foregroundStyle(color.opacity(0.9))
-            Text(text).font(.system(size: 12)).foregroundStyle(.white.opacity(dim ? 0.62 : 0.88))
+            Text(text).font(.system(size: 12)).foregroundStyle(.white.opacity(dim ? 0.62 : 0.88)).lineLimit(1)
         }
     }
 

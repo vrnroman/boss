@@ -111,6 +111,7 @@ struct DigestViewTests {
     @Test func clipCutsOnAWord() {
         #expect(DigestView.clip("one two three four five", 12) == "one two…")
         #expect(DigestView.clip("**bold** `code`", 50) == "bold code")
+        #expect(DigestView.clip("I told boss that:\n- videos deleted;\n- caches cleared", 200) == "I told boss that: · videos deleted; · caches cleared")
     }
 }
 
