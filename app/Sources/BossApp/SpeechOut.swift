@@ -5,11 +5,14 @@ import BossCore
 /// Kokoro sidecar first (English; Russian only if `kokoroRussian`), else AVSpeechSynthesizer
 /// (Milena for Russian, the best installed en-US voice for English).
 @MainActor
-final class SpeechOut: NSObject, Speaker, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
+final class SpeechOut: NSObject, Speaker, VoiceBackend, AVSpeechSynthesizerDelegate, AVAudioPlayerDelegate {
     private let settings: BossSettings
     private let synth = AVSpeechSynthesizer()
     private var player: AVAudioPlayer?
-    private var continuation: CheckedContinuation<Void, Never>?
+    private var playerDone: (@MainActor () -> Void)?
+    private var sayDone: (@MainActor () -> Void)?
+    private var utterance: AVSpeechUtterance?
+    private lazy var guarded = GuardedSpeaker(backend: self)
     private let session: URLSession = {
         let c = URLSessionConfiguration.ephemeral
         c.timeoutIntervalForRequest = 10
@@ -23,27 +26,16 @@ final class SpeechOut: NSObject, Speaker, AVSpeechSynthesizerDelegate, AVAudioPl
         synth.delegate = self
     }
 
-    func speak(_ text: String, lang: String?) async {
-        let ru = lang == "ru"
-        if (!ru || settings.kokoroRussian), Date() > kokoroDownUntil, let wav = await kokoro(text, lang: lang ?? "en") {
-            if await play(wav) { return }
-        }
-        await system(text, ru: ru)
+    // Speaker: everything goes through the guard, which stops at any stage.
+    func speak(_ text: String, lang: String?) async { await guarded.speak(text, lang: lang) }
+    func stop() { guarded.stop() }
+
+    // VoiceBackend
+    var useKokoro: (String?) -> Bool {
+        { [unowned self] lang in (lang != "ru" || self.settings.kokoroRussian) && Date() > self.kokoroDownUntil }
     }
 
-    func stop() {
-        player?.stop()
-        synth.stopSpeaking(at: .immediate)
-        finish()
-    }
-
-    private func finish() {
-        let c = continuation
-        continuation = nil
-        c?.resume()
-    }
-
-    private func kokoro(_ text: String, lang: String) async -> Data? {
+    func synthesize(_ text: String, lang: String) async -> Data? {
         var req = URLRequest(url: URL(string: "http://127.0.0.1:\(Ports.tts)/speak")!)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -58,23 +50,32 @@ final class SpeechOut: NSObject, Speaker, AVSpeechSynthesizerDelegate, AVAudioPl
         }
     }
 
-    private func play(_ data: Data) async -> Bool {
+    func play(_ data: Data, done: @escaping @MainActor () -> Void) -> Bool {
+        player?.stop()
         guard let p = try? AVAudioPlayer(data: data) else { return false }
         player = p
         p.delegate = self
-        guard p.play() else { return false }
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in continuation = c }
+        playerDone = done
+        guard p.play() else { playerDone = nil; return false }
         return true
     }
 
-    private func system(_ text: String, ru: Bool) async {
+    func say(_ text: String, ru: Bool, done: @escaping @MainActor () -> Void) {
         let u = AVSpeechUtterance(string: SpeechItem.speakable(text))
         u.voice = ru ? Self.russianVoice() : Self.englishVoice(preferred: settings.voice)
         u.rate = AVSpeechUtteranceDefaultSpeechRate * (ru ? 1.0 : 1.02)
-        await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in
-            continuation = c
-            synth.speak(u)
-        }
+        sayDone = done
+        utterance = u
+        synth.speak(u)
+    }
+
+    func halt() {
+        player?.stop()
+        player = nil
+        playerDone = nil
+        if synth.isSpeaking { synth.stopSpeaking(at: .immediate) }
+        sayDone = nil
+        utterance = nil
     }
 
     static func russianVoice() -> AVSpeechSynthesisVoice? {
@@ -96,15 +97,15 @@ final class SpeechOut: NSObject, Speaker, AVSpeechSynthesizerDelegate, AVAudioPl
     }
 
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didFinish u: AVSpeechUtterance) {
-        Task { @MainActor in self.finish() }
+        Task { @MainActor in guard u === self.utterance else { return }; self.utterance = nil; let d = self.sayDone; self.sayDone = nil; d?() }
     }
     nonisolated func speechSynthesizer(_ s: AVSpeechSynthesizer, didCancel u: AVSpeechUtterance) {
-        Task { @MainActor in self.finish() }
+        Task { @MainActor in guard u === self.utterance else { return }; self.utterance = nil; let d = self.sayDone; self.sayDone = nil; d?() }
     }
     nonisolated func audioPlayerDidFinishPlaying(_ p: AVAudioPlayer, successfully flag: Bool) {
-        Task { @MainActor in self.finish() }
+        Task { @MainActor in guard p === self.player else { return }; let d = self.playerDone; self.playerDone = nil; d?() }
     }
     nonisolated func audioPlayerDecodeErrorDidOccur(_ p: AVAudioPlayer, error: Error?) {
-        Task { @MainActor in self.finish() }
+        Task { @MainActor in guard p === self.player else { return }; let d = self.playerDone; self.playerDone = nil; d?() }
     }
 }
