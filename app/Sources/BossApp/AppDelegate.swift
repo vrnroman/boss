@@ -12,11 +12,6 @@ final class FloatingPanel: NSPanel {
 }
 
 /// Hosting view that reacts to the first click even though its window is never key.
-extension NSWindow {
-    /// This window or one of its children (the chat) is the key window.
-    var isKeyOrChildKey: Bool { isKeyWindow || (childWindows ?? []).contains { $0.isKeyWindow } }
-}
-
 final class FirstMouseHostingView<V: View>: NSHostingView<V> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
@@ -201,8 +196,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         placeChat()
         // A child of the panel: they come forward and go behind other apps together.
         if c.parent == nil { panel.addChildWindow(c, ordered: .above) }
-        NSApp.activate(ignoringOtherApps: true)
-        c.orderFront(nil)
+        NSApp.activate()
+        c.orderFrontRegardless()
     }
 
     /// The window's background: solid dark, rounded. No see-through blur, so text reads the same
@@ -264,17 +259,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     /// The ring in the menu bar: Boss in front → hide it; hidden or behind other windows → bring it forward.
+    /// Decided from the screen, not from NSApp.isActive: macOS 26 refuses to activate an accessory
+    /// app from a status-item click, so "active" stayed false and the ring never got Boss in view.
     func togglePanel() {
-        if panel.isVisible && NSApp.isActive && panel.isKeyOrChildKey {
-            panel.orderOut(nil); engine.panelVisible = false; engine.closeChat()
-        } else {
-            bringToFront(); engine.panelVisible = true
+        switch WindowFront.ringAction(panelVisible: panel.isVisible, unobscured: bossUnobscured()) {
+        case .hide: panel.orderOut(nil); engine.panelVisible = false; engine.closeChat()
+        case .show: bringToFront(); engine.panelVisible = true
         }
     }
 
+    func bossUnobscured() -> Bool {
+        var ours: Set<Int> = [panel.windowNumber]
+        if let c = chatPanel, c.isVisible { ours.insert(c.windowNumber) }
+        let raw = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let list = raw.compactMap { w -> ScreenWindow? in
+            guard let pid = w[kCGWindowOwnerPID as String] as? Int32, let n = w[kCGWindowNumber as String] as? Int,
+                  let layer = w[kCGWindowLayer as String] as? Int,
+                  let b = w[kCGWindowBounds as String] as? NSDictionary, let r = CGRect(dictionaryRepresentation: b) else { return nil }
+            return ScreenWindow(pid: pid, number: n, layer: layer, bounds: r, alpha: w[kCGWindowAlpha as String] as? Double ?? 1)
+        }
+        return WindowFront.isUnobscured(ours: ours, pid: ProcessInfo.processInfo.processIdentifier, list: list)
+    }
+
+    /// Raise the panel (and the chat with it) above every other app, whether or not macOS lets Boss
+    /// become the active app. Roman's first click into it then gives it the keyboard.
     func bringToFront() {
-        NSApp.activate(ignoringOtherApps: true)
+        NSApp.activate()
         panel.makeKeyAndOrderFront(nil)
+        panel.orderFrontRegardless()
+        if let c = chatPanel, c.parent != nil, engine.chatSession != nil { c.orderFrontRegardless() }
     }
 
     // MARK: Status item
