@@ -107,8 +107,10 @@ extension, privileged helper, or root LaunchDaemon.
   with the App Sandbox entitlement.
 - The basic build uses ad-hoc signing. The normal installer creates a separate, user-owned,
   self-signed local code-signing keychain so permission grants remain stable across rebuilds.
-- The app is **not Apple Developer ID signed or notarized** in the current installer. Desktop
-  engineering should decide whether enterprise signing/notarization is required for approval.
+- The app is **not Apple Developer ID signed or notarized** in the current installer. The generated
+  self-signed identity is valid for ten years; its separate keychain has auto-lock disabled, and the
+  build uses no timestamp server. Desktop engineering should decide whether enterprise
+  signing/notarization is required for approval.
 
 ## Data and network flows
 
@@ -117,8 +119,9 @@ extension, privileged helper, or root LaunchDaemon.
 | Destination | When | Data sent | Notes |
 | --- | --- | --- | --- |
 | **Claude service configured for Claude Code** | Dispatch, worker operation, and optional chat summarization | Transcribed instructions; worker prompts/replies; session names, working-folder context and status; up to two recent user-prompt excerpts per candidate session for routing; selected recent chat content for digests | Uses the existing signed-in Claude Code configuration and organization settings. Boss adds no separate Anthropic credential or endpoint. Raw microphone WAV files are not sent. Exact hosts/proxy behavior should be taken from the approved Claude Code deployment. |
-| **`api.telegram.org`** | Optional text fallback, and explicit “radio me” command | Away fallback: report/question text and links. Radio: a generated M4A recap of recent reports/open questions and a caption | Text fallback is enabled by default but only acts when configured and after at least 10 minutes of keyboard/mouse inactivity. Radio runs only on explicit request. Radio audio is synthesized speech, not the original microphone recording. Both features use the user's separately configured Telegram bot/chat credentials. |
-| **User-selected links** | When the user opens a report link | Determined by the destination and browser | Boss asks macOS to open the URL; it does not fetch the link itself. |
+| **User-provided Telegram away script** | Optional text fallback | Report/status text, questions, choices, and links | Enabled by default but dormant unless `~/.claude/tools/telegram-send.sh` exists and the user has been inactive for at least 10 minutes. That separately supplied script and its external endpoint are outside this repository and must be reviewed separately. |
+| **`api.telegram.org`** | Explicit “radio me” command | A generated M4A recap of recent reports/open questions, caption/counts, chat ID, and bot token in the API URL | Runs only on explicit request. Radio audio is synthesized speech, not the original microphone recording. It uses credentials from the separately configured `~/.claude/secrets/telegram.env`. |
+| **User-selected HTTP(S) or file links** | When the user opens a report link supplied by agent output | Determined by the destination and the application that opens it | Boss asks macOS to open the URL; it does not fetch the link itself. HTTP(S) browsing and any data embedded in the URL are subject to the destination/browser. |
 
 Boss includes no analytics, advertising, crash-reporting SDK, custom telemetry service, or automatic
 update service.
@@ -136,6 +139,9 @@ These downloads do not intentionally include user content:
 
 An office network can pre-stage the Whisper model to skip its Hugging Face download. Equivalent
 controlled hosting/pre-staging decisions may also be needed for the other dependencies and models.
+Exact Homebrew mirrors and analytics behavior depend on the existing Homebrew configuration. The
+current installer does not verify model checksums/signatures, and the Python lockfile pins versions
+without package hashes; an enterprise rollout may need verified internal artifact mirrors.
 
 ### Loopback listeners
 
@@ -222,6 +228,10 @@ No Docker image, privileged daemon, or bundled browser is used.
   file read/write/edit, web, agent, skill, and workflow tools are denied.
 - A `PreToolUse` guard enforces the dispatcher's session allow-list. The current default is
   `BOSS_ALLOW=*`, meaning every other eligible local Claude session; deployments can restrict it.
+- The supervisor launches Claude Code with `--dangerously-load-development-channels` for the Boss
+  channel and automatically answers recognized folder-trust, MCP-use, and development-channel startup
+  screens. It does not guess at unknown screens. Reviewers should include this startup trust behavior
+  in their assessment.
 - Worker sessions are **not** sandboxed by Boss. Relayed voice text is treated like a typed user
   instruction, and the worker's normal permissions apply.
 - Explicitly addressed/locked routes send immediately. Inferred routes normally provide a 2.5-second
@@ -254,7 +264,8 @@ sh install/uninstall.sh
 
 This stops the Boss components, removes the LaunchAgents and app bundle, stops the dispatcher tmux
 session, and restores/removes Boss's Claude configuration edits. It does not remove Homebrew tools,
-the source checkout, or Claude Code's pre-existing session transcripts.
+the source checkout, Claude Code's pre-existing session transcripts, macOS privacy-permission grants,
+or Boss's UserDefaults preferences.
 
 To remove all Boss runtime data as well:
 
@@ -302,7 +313,9 @@ The primary implementation evidence for this document is:
 - `channel/src/channel.ts:131-197` — routing context and recent-prompt excerpts.
 - `channel/src/state.ts:73-140` — persisted state and event history.
 - `boss-home/.claude/settings.json:1-49` and `boss-home/.claude/guard-send.mjs:4-27` — dispatcher restrictions.
+- `bin/boss-up.mjs:34-40,107-150` — dispatcher launch flags and recognized startup screens.
 - `install/install.sh:51-177` — files, models, signing, configuration, LaunchAgents, and loopback services.
+- `install/make-signing.sh:7-40` — local self-signed identity and keychain behavior.
 - `install/edit-config.mjs:43-119` — backup, application, and reversal of Claude configuration edits.
 - `install/uninstall.sh:1-24` — standard and purge removal behavior.
 - `docs/CONTRACT.md` — current Phase 1 ports, APIs, storage, and behavior.
