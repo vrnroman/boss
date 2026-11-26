@@ -157,7 +157,13 @@ public enum DigestView {
 
     /// First paragraph-ish of `s`, plain, at most `n` characters, cut on a word.
     public static func clip(_ s: String, _ n: Int) -> String {
-        let flat = s.replacingOccurrences(of: "\n\n", with: " · ").replacingOccurrences(of: "\n", with: " ")
+        // Lines without their list markers or headings, joined into one plain run.
+        let lines = s.split(separator: "\n", omittingEmptySubsequences: true).map { l -> String in
+            var t = l.trimmingCharacters(in: .whitespaces)
+            for m in ["- ", "* ", "• ", "### ", "## ", "# ", "> "] where t.hasPrefix(m) { t = String(t.dropFirst(m.count)) }
+            return t
+        }.filter { !$0.isEmpty }
+        let flat = lines.joined(separator: " · ")
             .replacingOccurrences(of: "**", with: "").replacingOccurrences(of: "`", with: "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
         guard flat.count > n else { return flat }
