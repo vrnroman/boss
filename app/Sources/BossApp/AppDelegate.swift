@@ -30,7 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     var telegramAllowed = false
     var panel: FloatingPanel!
     var chatPanel: ChatPanel?
-    let chat = ChatModel()
+    lazy var chat = ChatModel(keeper: DigestKeeper(
+        summarizer: ProcessInfo.processInfo.environment["BOSS_NO_SUMMARY"] == nil
+            ? ClaudeSummarizer.findClaude().map { ClaudeSummarizer(claude: $0, workDir: paths.state.appendingPathComponent("digest-work")) } : nil,
+        dir: paths.state.appendingPathComponent("digests")))
     static let chatWidth: CGFloat = 700
     var statusItem: NSStatusItem!
     let audio = AudioCapture()

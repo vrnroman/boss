@@ -70,12 +70,12 @@ public enum SessionChat {
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f
     }()
-    private static func date(_ v: Any?) -> Date? {
+    static func date(_ v: Any?) -> Date? {
         guard let s = v as? String else { return nil }
         return iso.date(from: s) ?? ISO8601DateFormatter().date(from: s)
     }
 
-    private static func texts(_ content: Any?) -> (text: String, images: Int) {
+    static func texts(_ content: Any?) -> (text: String, images: Int) {
         if let s = content as? String { return (s, 0) }
         guard let parts = content as? [[String: Any]] else { return ("", 0) }
         var out: [String] = []
@@ -136,15 +136,21 @@ public enum SessionChat {
 
     /// Reads the end of the transcript (the last `maxBytes`) and parses it. Empty when unreadable.
     public static func load(url: URL, maxBytes: Int = 2_000_000, limit: Int = 40) -> [ChatEntry] {
-        guard let h = try? FileHandle(forReadingFrom: url) else { return [] }
+        guard let text = tail(url: url, maxBytes: maxBytes) else { return [] }
+        return parse(text, limit: limit)
+    }
+
+    /// The last `maxBytes` of a file as text, without the line the cut went through.
+    static func tail(url: URL, maxBytes: Int) -> String? {
+        guard let h = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? h.close() }
         let size = (try? h.seekToEnd()) ?? 0
         let start = size > UInt64(maxBytes) ? size - UInt64(maxBytes) : 0
         try? h.seek(toOffset: start)
-        guard let data = try? h.readToEnd() else { return [] }
+        guard let data = try? h.readToEnd() else { return nil }
         var text = String(decoding: data, as: UTF8.self)
         if start > 0, let nl = text.firstIndex(of: "\n") { text = String(text[text.index(after: nl)...]) } // a cut first line
-        return parse(text, limit: limit)
+        return text
     }
 }
 
