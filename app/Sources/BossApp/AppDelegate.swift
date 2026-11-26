@@ -109,17 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         p.becomesKeyOnlyIfNeeded = false
         p.title = "Boss"
 
-        let fx = NSVisualEffectView()
-        fx.material = .hudWindow
-        fx.blendingMode = .behindWindow
-        fx.state = .active
-        fx.appearance = NSAppearance(named: .darkAqua)
-        fx.wantsLayer = true
-        fx.layer?.cornerRadius = 16
-        fx.layer?.cornerCurve = .continuous
-        fx.layer?.masksToBounds = true
-        fx.layer?.borderWidth = 0.5
-        fx.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        let fx = Self.solidBackdrop()
 
         let actions = PanelActions(
             toggleExpanded: { [weak self] in self?.toggleExpanded() },
@@ -212,6 +202,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         c.orderFront(nil)
     }
 
+    /// The window's background: solid dark, rounded. No see-through blur, so text reads the same
+    /// whatever is behind the window.
+    static func solidBackdrop() -> NSView {
+        let v = NSView()
+        v.appearance = NSAppearance(named: .darkAqua)
+        v.wantsLayer = true
+        v.layer?.backgroundColor = NSColor(calibratedWhite: 0.11, alpha: 1).cgColor
+        v.layer?.cornerRadius = 16
+        v.layer?.cornerCurve = .continuous
+        v.layer?.masksToBounds = true
+        v.layer?.borderWidth = 0.5
+        v.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        return v
+    }
+
     func makeChatPanel() -> ChatPanel {
         let p = ChatPanel(contentRect: NSRect(x: 0, y: 0, width: Self.chatWidth, height: 520),
                           styleMask: [.borderless, .fullSizeContentView], backing: .buffered, defer: false)
@@ -225,17 +230,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         p.isReleasedWhenClosed = false
         p.becomesKeyOnlyIfNeeded = false
         p.title = "Boss chat"
-        let fx = NSVisualEffectView()
-        fx.material = .hudWindow
-        fx.blendingMode = .behindWindow
-        fx.state = .active
-        fx.appearance = NSAppearance(named: .darkAqua)
-        fx.wantsLayer = true
-        fx.layer?.cornerRadius = 16
-        fx.layer?.cornerCurve = .continuous
-        fx.layer?.masksToBounds = true
-        fx.layer?.borderWidth = 0.5
-        fx.layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+        let fx = Self.solidBackdrop()
         let host = FirstMouseHostingView(rootView: ChatView(model: chat, engine: engine))
         host.translatesAutoresizingMaskIntoConstraints = false
         fx.addSubview(host)
